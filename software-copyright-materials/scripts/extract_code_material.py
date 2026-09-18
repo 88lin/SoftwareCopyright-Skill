@@ -235,7 +235,8 @@ def write_manifest_md(path: Path, manifest: dict[str, Any]) -> None:
         f"- 材料代码行数：{manifest['material_line_count']}",
         f"- 每页行数：{manifest['lines_per_page']}",
         f"- 单行最大显示宽度：{manifest['max_code_columns']} 列",
-        f"- 总页数：{manifest['total_pages']}",
+        f"- 已选源码估算总页数：{manifest['total_pages']}",
+        f"- 实际提交材料页数：{manifest['submitted_page_count']}",
         f"- 目标页数：{manifest['target_pages']}",
         f"- 候选源码可生成页数：{manifest['available_candidate_pages']}",
         f"- 补充状态：{manifest['supplement_status']}",
@@ -272,6 +273,8 @@ def extract(project: Path, out_dir: Path, software_name: str, version: str, line
             f"NEXT_ACTION: 当前已选代码只有 {total_pages} 页，但候选源码足够补齐到 {SPLIT_THRESHOLD_PAGES} 页。"
             "请在 草稿/代码文件选择.json 中继续选择补充文件，重新记录 code-selection 门禁后再抽取。"
         )
+    for stale_name in ("代码-前30页.md", "代码-后30页.md", "代码-全部.md"):
+        (out_dir / stale_name).unlink(missing_ok=True)
     outputs: list[str] = []
 
     if total_pages >= SPLIT_THRESHOLD_PAGES:
@@ -306,6 +309,7 @@ def extract(project: Path, out_dir: Path, software_name: str, version: str, line
         "lines_per_page": lines_per_page,
         "max_code_columns": MAX_CODE_COLUMNS,
         "total_pages": total_pages,
+        "submitted_page_count": 60 if total_pages >= SPLIT_THRESHOLD_PAGES else total_pages,
         "target_pages": SPLIT_THRESHOLD_PAGES,
         "available_candidate_line_count": available_lines,
         "available_candidate_pages": available_pages,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Best-effort screenshot helpers for operation manuals."""
+"""Collect user-supplied screenshots into an ordered OfficeCLI manifest."""
 
 from __future__ import annotations
 
@@ -8,9 +8,8 @@ import json
 import shutil
 import re
 from pathlib import Path
-from urllib.parse import urljoin
 
-from common import ensure_dir, read_json, write_json
+from common import ensure_dir, write_json
 
 
 def safe_name(path: str) -> str:
@@ -19,12 +18,28 @@ def safe_name(path: str) -> str:
     return value[:80] or "page"
 
 
-def collect_manual_screenshots(input_dir: Path, out_dir: Path) -> dict[str, object]:
+def manual_sort_key(path: Path) -> tuple[int, int, str]:
+    """Honor numeric filename prefixes such as 2-home before 10-settings."""
+    match = re.match(r"^(\d+)", path.stem)
+    if match:
+        return (0, int(match.group(1)), path.name.casefold())
+    return (1, 0, path.name.casefold())
+
+
+def collect_manual_screenshots(
+    input_dir: Path,
+    out_dir: Path,
+    method: str = "user-supplied",
+) -> dict[str, object]:
+    if input_dir.resolve() == out_dir.resolve():
+        raise SystemExit("Screenshot input and output directories must be different")
     out_dir = ensure_dir(out_dir)
     screenshots = []
     errors = []
     allowed = {".png", ".jpg", ".jpeg", ".webp"}
-    for index, path in enumerate(sorted(input_dir.iterdir()), start=1):
+    if not input_dir.is_dir():
+        raise SystemExit(f"Screenshot directory not found: {input_dir}")
+    for index, path in enumerate(sorted(input_dir.iterdir(), key=manual_sort_key), start=1):
         if path.suffix.lower() not in allowed or not path.is_file():
             continue
         target = out_dir / f"{index:02d}-{safe_name(path.stem)}{path.suffix.lower()}"
@@ -40,7 +55,7 @@ def collect_manual_screenshots(input_dir: Path, out_dir: Path) -> dict[str, obje
         errors.append({"error": f"no screenshot images found in {input_dir}"})
     manifest = {
         "status": "ok" if screenshots else "empty",
-        "method": "user-supplied",
+        "method": method,
         "screenshots": screenshots,
         "errors": errors,
     }
@@ -50,58 +65,21 @@ def collect_manual_screenshots(input_dir: Path, out_dir: Path) -> dict[str, obje
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-url")
-    parser.add_argument("--analysis")
     parser.add_argument("--out-dir", default="软件著作权申请资料/截图")
-    parser.add_argument("--max-pages", type=int, default=8)
-    parser.add_argument("--manual-dir", help="Collect user-supplied screenshots from this directory")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--input-dir", help="Directory containing screenshots to organize")
+    source.add_argument("--manual-dir", dest="input_dir", help="Backward-compatible alias for --input-dir")
+    parser.add_argument(
+        "--method",
+        choices=["chrome-devtools", "computer-use", "user-supplied"],
+        default="user-supplied",
+        help="Capture method recorded in the screenshot manifest",
+    )
     args = parser.parse_args()
 
-    if args.manual_dir:
-        manifest = collect_manual_screenshots(Path(args.manual_dir), Path(args.out_dir))
-        print(json.dumps(manifest, ensure_ascii=False, indent=2))
-        if not manifest["screenshots"]:
-            raise SystemExit(3)
-        return
-
-    if not args.base_url or not args.analysis:
-        raise SystemExit("Missing --base-url and --analysis unless --manual-dir is provided")
-
-    try:
-        from playwright.sync_api import sync_playwright
-    except Exception as exc:
-        print(json.dumps({"status": "error", "reason": f"playwright unavailable: {exc}"}, ensure_ascii=False))
-        raise SystemExit(2)
-
-    analysis = read_json(Path(args.analysis))
-    paths = analysis.get("routes") or ["/"]
-    clean_paths = []
-    for path in paths:
-        if isinstance(path, str) and path.startswith("/") and path not in clean_paths:
-            clean_paths.append(path)
-    clean_paths = clean_paths[: args.max_pages] or ["/"]
-
-    out_dir = ensure_dir(Path(args.out_dir))
-    screenshots = []
-    errors = []
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page(viewport={"width": 1440, "height": 1000})
-        for route in clean_paths:
-            url = urljoin(args.base_url.rstrip("/") + "/", route.lstrip("/"))
-            file_path = out_dir / f"{safe_name(route)}.png"
-            try:
-                page.goto(url, wait_until="networkidle", timeout=15_000)
-                page.screenshot(path=str(file_path), full_page=True)
-                screenshots.append({"route": route, "url": url, "path": str(file_path.resolve())})
-            except Exception as exc:
-                errors.append({"route": route, "url": url, "error": str(exc)})
-        browser.close()
-
-    manifest = {"status": "ok" if screenshots else "partial", "screenshots": screenshots, "errors": errors}
-    write_json(out_dir / "截图清单.json", manifest)
+    manifest = collect_manual_screenshots(Path(args.input_dir), Path(args.out_dir), args.method)
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
-    if not screenshots:
+    if not manifest["screenshots"]:
         raise SystemExit(3)
 
 

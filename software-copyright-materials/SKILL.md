@@ -7,12 +7,10 @@ description: >
   The workflow analyzes the imported project, extracts real source code, creates Markdown
   drafts for user confirmation, then uses a pinned OfficeCLI backend to produce final
   Word documents and TXT.
-allowed-tools: >
-  Bash, Read, Write, Edit, Glob, Grep, WebSearch, WebFetch
 metadata:
   short-description: 生成软著申请资料 Word/TXT
   author: Fokkyp
-  version: "2.1"
+  version: "2.2"
   repository: https://github.com/Fokkyp/SoftwareCopyright-Skill
 ---
 
@@ -46,6 +44,18 @@ metadata:
 - OfficeCLI 固定验证版本为 `1.0.151`，运行时必须设置 `OFFICECLI_SKIP_UPDATE=1`，不得静默升级、静默安装或回退到 python-docx/Pandoc/.NET 工具包。
 - OfficeCLI 的安装、批处理、分页与校验细节见 `references/officecli_backend.md`。
 
+## 路径与按需参考
+
+开始执行前，从当前已加载的 `SKILL.md` 位置取得本 skill 的绝对目录，记为 `<SKILL_DIR>`；找到可用的 Python 3.10+ 解释器，记为 `<PYTHON>`。下面命令中的尖括号是必须替换的占位符，不要依赖 `${CLAUDE_SKILL_DIR}` 等某个 agent 专属环境变量，也不要把占位符原样交给 shell。
+
+按当前阶段读取对应参考资料，不要一次性把所有内容都塞入上下文：
+
+- 填申请表前读 [application_fields.md](references/application_fields.md)。
+- 研判业务前读 [business_understanding_rules.md](references/business_understanding_rules.md)。
+- 选择和抽取代码前读 [code_selection_rules.md](references/code_selection_rules.md) 与 [copyright_material_rules.md](references/copyright_material_rules.md)。
+- 写操作手册前读 [manual_structure.md](references/manual_structure.md)。
+- 正式生成和校验 DOCX 前读 [officecli_backend.md](references/officecli_backend.md)。
+
 ## 强制人工门禁
 
 凡是涉及用户选择、确认或补充信息的阶段，必须先停止当前执行，不得继续调用下一步脚本。即使处于自动审核、自动继续或无人值守模式，也必须把 `STOP_FOR_USER` 和 `NEXT_ACTION` 原样告知用户，并等待用户输入后再继续。
@@ -53,7 +63,7 @@ metadata:
 禁止使用“用户未选择则默认继续”的逻辑。用户回复确认后，先用确认脚本记录对应门禁，再进入下一阶段：
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/confirm_stage.py --workdir 软件著作权申请资料 --stage <阶段名> --note "<用户确认内容>"
+<PYTHON> "<SKILL_DIR>/scripts/confirm_stage.py" --workdir 软件著作权申请资料 --stage <阶段名> --note "<用户确认内容>"
 ```
 
 必须停住的门禁：
@@ -73,7 +83,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/confirm_stage.py --workdir 软件著作权�
 一开始先在当前工作目录创建输出目录并检查运行能力：
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/check_environment.py \
+<PYTHON> "<SKILL_DIR>/scripts/check_environment.py" \
   --out-dir 软件著作权申请资料
 ```
 
@@ -99,7 +109,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/check_environment.py \
 用户回复后记录门禁：
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/confirm_stage.py \
+<PYTHON> "<SKILL_DIR>/scripts/confirm_stage.py" \
   --workdir 软件著作权申请资料 \
   --stage environment \
   --note "<用户选择>"
@@ -118,7 +128,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/confirm_stage.py \
 运行：
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/analyze_project.py \
+<PYTHON> "<SKILL_DIR>/scripts/analyze_project.py" \
   --project <项目目录> \
   --out 软件著作权申请资料/analysis/project.json
 ```
@@ -136,7 +146,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/analyze_project.py \
 在写申请表和操作手册前，先让脚本收集项目证据：
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/generate_business_context.py \
+<PYTHON> "<SKILL_DIR>/scripts/generate_business_context.py" \
   --project <项目目录> \
   --analysis 软件著作权申请资料/analysis/project.json \
   --software-name "<软件全称>" \
@@ -198,7 +208,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/generate_business_context.py \
 然后运行：
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/generate_business_context.py \
+<PYTHON> "<SKILL_DIR>/scripts/generate_business_context.py" \
   --project <项目目录> \
   --analysis 软件著作权申请资料/analysis/project.json \
   --software-name "<软件全称>" \
@@ -228,7 +238,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/generate_business_context.py \
 生成 `业务理解.md/json` 后必须停止，等待用户确认或修改。业务理解确认前，不得生成申请表和操作手册。如果业务理解仍不充分，先请用户补充产品说明。用户确认后运行：
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/confirm_stage.py \
+<PYTHON> "<SKILL_DIR>/scripts/confirm_stage.py" \
   --workdir 软件著作权申请资料 \
   --stage business \
   --note "<用户确认内容>"
@@ -236,64 +246,23 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/confirm_stage.py \
 
 ### 5. 引导用户确认字段
 
-根据分析结果，向用户确认以下字段（按官网实际表单顺序）：
+先读取 [application_fields.md](references/application_fields.md)，严格按其中的官网字段顺序、枚举、长度和来源口径向用户确认。项目可推断字段可以先给建议值，著作权人、日期、软件全称、版本号和硬件/系统环境必须由用户明确确认；项目版本小于 V1.0 时，询问本次用 V1.0 还是项目当前版本。
 
-- 软件全称
-- 软件简称（可选）
-- 版本号
-- 软件分类（应用软件/嵌入式软件/中间件/系统软件/其他）
-- 开发完成日期（YYYY-MM-DD 格式）
-- 开发方式（单独开发/合作开发/委托开发/下达任务开发）
-- 软件说明（原创 / 修改（含翻译软件、合成软件））
-- 发表状态（已发表/未发表）
-- 首次发表日期（已发表时填写，YYYY-MM-DD 格式；未发表则留空）
-- 著作权人（复合字段：国家/省市/类型[自然人/法人]/姓名/证件类型/证件号）
-- 权利范围（全部权利/部分权利）
-- 权利取得方式（原始取得/继受取得）
-- 开发的硬件环境（≤50字符）
-- 运行的硬件环境（≤50字符）
-- 开发该软件的操作系统（≤50字符）
-- 软件开发环境 / 开发工具（≤50字符，格式：开发环境: xxx/开发工具: xxx）
-- 该软件的运行平台 / 操作系统（≤50字符）
-- 软件运行支撑环境 / 支持软件（≤50字符）
-- 编程语言（预设按钮选择 + 自定义输入≤120字符）
-- 源程序量（纯数字，单位为行，指全部源程序总行数）
-- 开发目的（≤50字符）
-- 面向领域 / 行业（≤50字符）
-- 软件的主要功能（500~1300字）
-- 软件的技术特点（多选标签 + 文本描述≤100字符；标签：APP/游戏软件/教育软件/金融软件/医疗软件/地理信息软件/云计算软件/信息安全软件/大数据软件/人工智能软件/VR软件/5G软件/小程序/物联网软件/智慧城市软件，都不符合时可不选）
-- 页数（代码鉴别材料实际页数）
+特别注意：
 
-项目可推断字段可以先给建议值；硬件/系统环境必须允许用户选择建议值或手动填写。字段口径必须区分清楚：
+- 软件全称和版本号最终以 `草稿/申请表信息.md` 为准，并统一用于文件名、页眉、标题和正文。
+- 源程序量是登记软件全部源程序总行数，不是已选择代码材料的行数。
+- 页数是实际提交的代码鉴别材料页数；前后各 30 页模式填 60，不足 60 页时填全部材料页数。
+- 软件开发环境/开发工具不要写 React、Vite、TypeScript 等技术栈；字段格式和字符限制见参考文档。
 
-- 软件全称：必须由用户确认。最终正式资料文件名、代码 Word 页眉、操作手册标题和正文中的软件名称，都必须与 `申请表信息.md` 的"软件全称"字段一致。
-- 软件简称：可选字段，如有常用简称则填写。
-- 版本号：必须由用户确认。优先读取项目配置中的版本号作为证据；如果项目版本号小于 V1.0（例如 V0.1.0、V0.9.0），必须明确询问用户"软著首次提交通常写 V1.0，本次填写 V1.0 还是项目当前版本号"。最终 `申请表信息.md` 的"版本号"字段就是正式资料版本号。
-- 软件分类：应用软件/嵌入式软件/中间件/系统软件/其他，默认为应用软件。
-- 开发完成日期、首次发表日期：必须使用 YYYY-MM-DD 格式。
-- 开发方式：单独开发/合作开发/委托开发/下达任务开发，默认单独开发。
-- 软件说明：原创 / 修改（含翻译软件、合成软件），默认原创。
-- 发表状态：已发表或未发表；已发表需附首次发表日期，未发表则首次发表日期留空。
-- 软件开发环境 / 开发工具：≤50字符，格式为 `开发环境: <操作系统>/开发工具: <IDE名称>`，例如 `开发环境: Windows 11/开发工具: Visual Studio Code`；不要把 React、Next.js、Vite、TypeScript 等技术栈写到此字段。
-- 开发该软件的操作系统：≤50字符，填写实际开发电脑的操作系统版本，例如 Windows 10、Windows 11、macOS 14、macOS 15。
-- 该软件的运行平台 / 操作系统：≤50字符，填写软件运行所在的操作系统或浏览器环境。
-- 软件运行支撑环境 / 支持软件：≤50字符，直接列出运行依赖（如 Node.js、npm、浏览器），不加格式前缀。
-- 开发的硬件环境：≤50字符，优先读取当前电脑 CPU、内存、硬盘配置作为建议值；读取不到时让用户填写。
-- 运行的硬件环境：≤50字符，默认可沿用开发硬件环境建议值，也可以按实际部署或运行设备修改。
-- 源程序量：纯数字（不含"行"字），指登记软件全部源程序的总行数。
-- 开发目的：≤50字符，用一句话说明软件开发目的，不能只写软件名称。
-- 面向领域 / 行业：≤50字符。
-- 软件的主要功能：500~1300字，详细描述软件核心功能，至少 500 字。
-- 软件的技术特点：多选标签（APP/游戏软件/教育软件等）+ 文本描述≤100字符，简述技术架构和关键技术；标签都不符合时可不选。
-
-此阶段需要先停止等待用户输入；收到用户回复后，可整理为 `answers` JSON 传入申请表草稿生成。申请表字段的最终门禁在 `草稿/申请表信息.md` 生成后记录。
+此阶段先停止等待用户输入；收到回复后可整理为 `answers` JSON 传入申请表草稿生成。申请表字段的最终门禁在 `草稿/申请表信息.md` 生成后记录。
 
 ### 6. 确认代码文件选择
 
 生成代码材料前，先运行候选文件分析：
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/propose_code_selection.py \
+<PYTHON> "<SKILL_DIR>/scripts/propose_code_selection.py" \
   --project <项目目录> \
   --analysis 软件著作权申请资料/analysis/project.json \
   --out-dir 软件著作权申请资料/草稿
@@ -313,7 +282,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/propose_code_selection.py \
 模型选择通常优先考虑前端入口、页面、核心组件、业务交互、数据请求、状态处理等能给审核员看懂软件功能的代码；如果相关前端代码不足 60 页，再补充后端服务、业务处理等相关源码。补充文件同样必须写入 `代码文件选择.json` 并由用户确认。不要默认抽取全量代码库。代码材料按完整文件抽取并去除纯空行，不支持只抽取某个文件的中间行段。用户确认并记录 `code-selection` 门禁后，代码抽取只读取 `代码文件选择.json` 中选中的完整文件。用户确认后运行：
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/confirm_stage.py \
+<PYTHON> "<SKILL_DIR>/scripts/confirm_stage.py" \
   --workdir 软件著作权申请资料 \
   --stage code-selection \
   --note "<用户确认内容>"
@@ -324,7 +293,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/confirm_stage.py \
 运行代码材料抽取：
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/extract_code_material.py \
+<PYTHON> "<SKILL_DIR>/scripts/extract_code_material.py" \
   --project <项目目录> \
   --analysis 软件著作权申请资料/analysis/project.json \
   --selection 软件著作权申请资料/草稿/代码文件选择.json \
@@ -342,11 +311,12 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/extract_code_material.py \
 - 总页数 `< 60` 但候选清单还有可补充源码：停止并要求用户在 `代码文件选择.json` 中继续选择补充文件。
 - 不为大项目生成超大“全量备份 Word”。
 - 同时生成 `代码提取清单.md` 和 `代码提取清单.json`，用于追溯代码来源。
+- 每次重新抽取都会清理三种代码 Markdown 中与当前输出模式冲突的旧文件；后续步骤只能读取 `代码提取清单.json` 的 `outputs`，不得因为目录里残留旧文件而额外生成材料。
 
 生成申请表信息草稿：
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/generate_application_info.py \
+<PYTHON> "<SKILL_DIR>/scripts/generate_application_info.py" \
   --analysis 软件著作权申请资料/analysis/project.json \
   --code-manifest 软件著作权申请资料/草稿/代码提取清单.json \
   --business-context 软件著作权申请资料/草稿/业务理解.json \
@@ -358,7 +328,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/generate_application_info.py \
 生成后必须停止，让用户检查并补全 `草稿/申请表信息.md`。字段补全并确认后运行：
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/confirm_stage.py \
+<PYTHON> "<SKILL_DIR>/scripts/confirm_stage.py" \
   --workdir 软件著作权申请资料 \
   --stage application-fields \
   --note "<用户确认内容>"
@@ -367,7 +337,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/confirm_stage.py \
 生成操作手册草稿：
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/generate_manual_draft.py \
+<PYTHON> "<SKILL_DIR>/scripts/generate_manual_draft.py" \
   --analysis 软件著作权申请资料/analysis/project.json \
   --business-context 软件著作权申请资料/草稿/业务理解.json \
   --software-name "<软件全称>" \
@@ -399,7 +369,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/generate_manual_draft.py \
 用户选择后，先记录门禁：
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/confirm_stage.py \
+<PYTHON> "<SKILL_DIR>/scripts/confirm_stage.py" \
   --workdir 软件著作权申请资料 \
   --stage screenshot-method \
   --method <chrome-devtools|computer-use|user-supplied|skip> \
@@ -408,15 +378,18 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/confirm_stage.py \
 
 然后按用户选择检查当前能力并执行：
 
-- 选择 Chrome DevTools MCP：先用工具发现能力检查当前环境是否有 `mcp__chrome_devtools__` 的 `list_pages`、`take_snapshot`、`take_screenshot`。可用时，先 `list_pages` 确认当前浏览器页面，再按页面/路由截图保存到 `软件著作权申请资料/截图/`；不可用时停止，告知用户需要重新选择截图方式或手动提供截图。
-- 选择 Codex Computer Use：先用工具发现能力检查当前环境是否有 `mcp__computer_use__` 的 `get_app_state`、`click`、`press_key`。可用时，先 `get_app_state` 查看目标应用或浏览器当前状态，再按操作手册需要导航和截图；如果当前 Computer Use 只能返回会话内截图而不能直接保存图片文件，则说明限制，并让用户改选 Chrome DevTools MCP 或把截图放入 `用户截图/`。
-- 选择用户自行截图：创建 `软件著作权申请资料/用户截图/`，提示用户把截图文件放入该目录；用户按操作手册模块顺序给文件名添加数字前缀后，运行下面的整理命令，把图片复制到 `软件著作权申请资料/截图/` 并生成有序的 `截图清单.json`。
+- 选择 Chrome DevTools MCP：先检查当前环境实际暴露的 Chrome DevTools 工具及其文档，不要假设固定的 MCP 工具名。能力需要覆盖页面列表/当前页确认、页面读取和截图保存；可用时按模块顺序把截图保存到 `软件著作权申请资料/截图原始/`，不可用时停止并让用户重新选择。
+- 选择 Codex Computer Use：如果当前环境提供 `computer-use` skill 或等价桌面/浏览器控制工具，先读取其使用说明，再查看目标应用状态并按操作手册导航，把截图保存到 `软件著作权申请资料/截图原始/`。不要照搬旧版 `get_app_state/click/press_key` 名称；只调用当前实际提供的 API。如果截图只能显示在会话中而不能保存为文件，则说明限制，并让用户改选 Chrome DevTools MCP 或把截图放入 `用户截图/`。
+- 选择用户自行截图：创建 `软件著作权申请资料/用户截图/`，提示用户把截图文件放入该目录；用户按操作手册模块顺序给文件名添加数字前缀后，运行下面的整理命令，把图片复制到 `软件著作权申请资料/截图/` 并生成有序的 `截图清单.json`。数字前缀按数值排序，因此 `2-主页.png` 会排在 `10-设置.png` 前面。
 - 选择跳过截图：不运行截图工具，继续保留操作手册中的可见截图预留文字；在生成报告中说明用户选择暂不截图，正式操作手册已预留截图位置。
 
+截图文件准备好后必须运行整理脚本，生成正式构建会读取的 `截图/截图清单.json`。Chrome DevTools 或 Computer Use 把 `--input-dir` 指向 `截图原始/`，并把 `--method` 改成所选方式；用户自行截图则指向 `用户截图/`：
+
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/capture_screenshots.py \
-  --manual-dir 软件著作权申请资料/用户截图 \
-  --out-dir 软件著作权申请资料/截图
+<PYTHON> "<SKILL_DIR>/scripts/capture_screenshots.py" \
+  --input-dir 软件著作权申请资料/用户截图 \
+  --out-dir 软件著作权申请资料/截图 \
+  --method user-supplied
 ```
 
 截图成功后无需手工修改 `草稿/操作手册.md`：正式生成脚本会按 `截图清单.json` 中的顺序，把可用图片依次替换到操作手册的可见截图预留位置，再通过 OfficeCLI `picture` 元素写入 Word。图片少于预留位时保留未匹配提示；图片多于预留位、文件缺失或格式不支持时在生成报告中说明。截图失败或用户选择暂不提供截图时，继续生成带截图预留位的文字版。
@@ -440,8 +413,10 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/capture_screenshots.py \
 
 用户确认后，必须记录 `markdown` 门禁；未记录时不得生成正式 Word/TXT。
 
+确认脚本会为业务理解、代码选择、申请表和最终草稿记录内容指纹。任何已确认文件在确认后又发生修改，对应门禁立即失效，必须让用户查看变化并重新确认；不能沿用旧的确认布尔值。最终确认前还必须检查代码提取清单、当前代码 Markdown、申请表、操作手册和操作手册自检记录全部存在，且没有与当前代码输出模式冲突的旧草稿。
+
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/confirm_stage.py \
+<PYTHON> "<SKILL_DIR>/scripts/confirm_stage.py" \
   --workdir 软件著作权申请资料 \
   --stage markdown \
   --note "<用户确认内容>"
@@ -452,7 +427,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/confirm_stage.py \
 用户确认后运行：
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/build_docx_from_md.py \
+<PYTHON> "<SKILL_DIR>/scripts/build_docx_from_md.py" \
   --workdir 软件著作权申请资料 \
   --software-name "<软件全称>" \
   --version "<版本号>"
@@ -461,6 +436,8 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/build_docx_from_md.py \
 正式生成脚本必须重新读取 `草稿/申请表信息.md` 中已确认的“软件全称”和“版本号”，并用它们生成正式资料文件名、代码 Word 页眉和操作手册 Word 页眉。操作手册页眉必须与代码材料页眉格式一致：左侧为“软件全称 版本号”，右侧为“第 <页码> 页”。若命令参数 `--software-name` / `--version` 与申请表字段不同，以申请表字段为准，并在 `正式资料/生成报告.md` 中记录提示。
 
 生成脚本通过 OfficeCLI 原子 batch 写入 DOCX，并关闭自动更新与后台 resident。代码草稿中的每个物理行对应一个 Word 段落；超过 90 显示列的源码行在抽取阶段确定性折行，避免 Word 因代码宽度再次换行而造成页数漂移。所有代码段落连续写入正文，不设置 `pageBreakBefore`，最终分页由 Word 排版引擎自动完成；草稿中的页分组只用于选材量估算。不要启用 Word 自动行号替代源码行处理。
+
+正式生成只处理 `草稿/代码提取清单.json` 的 `outputs` 中声明的代码 Markdown，并清理当前软件名下与本次模式冲突的旧代码 DOCX。不能遍历目录后把前 30 页、后 30 页和全部代码三种旧文件一起输出。
 
 输出：
 
@@ -485,14 +462,14 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/build_docx_from_md.py \
 可用命令：
 
 ```bash
-python3 -m py_compile ${CLAUDE_SKILL_DIR}/scripts/*.py
+<PYTHON> -m compileall -q "<SKILL_DIR>/scripts"
 officecli validate <生成的docx> --json
 officecli view <生成的docx> issues --json
 officecli view <生成的代码docx> stats --page-count --json
 officecli view <生成的docx> screenshot --grid auto --render auto -o <预览.png>
 ```
 
-`validate` 只证明 OpenXML 结构可读，不能证明分页正确。Windows 且安装 Word 时由 OfficeCLI 使用 `stats --page-count` 读取自动分页后的真实页数并写入报告，不因它与草稿估算页数不同而重新插入固定分页；其他环境先用 OfficeCLI HTML 预览，再用 Word/WPS 打开最终文件复核页数。只使用 OfficeCLI 后端，不引入其他 DOCX 渲染依赖。
+`validate` 只证明 OpenXML 结构可读，不能证明分页正确。Windows 且安装 Word 时由 OfficeCLI 使用 `stats --page-count` 读取自动分页后的真实页数；前 30 页/后 30 页文档必须分别正好 30 页，否则生成失败并要求重新校准选材量，不得改回人工固定分页。其他环境先用 OfficeCLI HTML 预览，再用 Word/WPS 打开最终文件复核页数。只使用 OfficeCLI 后端，不引入其他 DOCX 渲染依赖。
 
 ## 何时询问用户
 

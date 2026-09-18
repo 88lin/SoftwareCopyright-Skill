@@ -60,7 +60,8 @@ def plain_feature_name(name: str) -> str:
 
 TECHNICAL_TERMS = [
     "技术实现",
-    "代码",
+    "代码实现",
+    "源码结构",
     "框架",
     "接口封装",
     "状态管理",

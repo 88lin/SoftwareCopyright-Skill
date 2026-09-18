@@ -296,7 +296,26 @@ def required_text(data: dict[str, Any], field: str) -> str:
     return value
 
 
+def effective_len(value: str) -> int:
+    return len(re.sub(r"\s+", "", value))
+
+
 def normalize_model_context(model: dict[str, Any], evidence: dict[str, Any], web_notes: str) -> dict[str, Any]:
+    industry = required_text(model, "industry")
+    application_purpose = required_text(model, "application_purpose")
+    main_functions = required_text(model, "main_functions")
+    technical_characteristics = required_text(model, "technical_characteristics")
+    if len(industry) > 50:
+        raise SystemExit("Model context field exceeds 50 characters: industry")
+    if len(application_purpose) > 50:
+        raise SystemExit("Model context field exceeds 50 characters: application_purpose")
+    main_function_chars = effective_len(main_functions)
+    if not 500 <= main_function_chars <= 1300:
+        raise SystemExit(
+            f"Model context field main_functions must contain 500-1300 non-whitespace characters; got {main_function_chars}"
+        )
+    if len(technical_characteristics) > 100:
+        raise SystemExit("Model context field exceeds 100 characters: technical_characteristics")
     features = required_list(model.get("business_features"), "business_features")
     details = model.get("business_feature_details") or {}
     if not isinstance(details, dict):
@@ -347,15 +366,15 @@ def normalize_model_context(model: dict[str, Any], evidence: dict[str, Any], web
         "source_documents": [{"path": doc["path"], "size": doc["size"]} for doc in evidence["documents"]],
         "project_evidence_file": "业务理解证据.md",
         "product_positioning": required_text(model, "product_positioning"),
-        "industry": required_text(model, "industry"),
+        "industry": industry,
         "target_users": required_list(model.get("target_users"), "target_users"),
         "core_value": required_text(model, "core_value"),
         "business_features": features,
         "business_feature_details": {feature: str(details.get(feature)).strip() for feature in features},
         "operation_flow": required_list(model.get("operation_flow"), "operation_flow"),
-        "application_purpose": required_text(model, "application_purpose"),
-        "main_functions": required_text(model, "main_functions"),
-        "technical_characteristics": required_text(model, "technical_characteristics"),
+        "application_purpose": application_purpose,
+        "main_functions": main_functions,
+        "technical_characteristics": technical_characteristics,
         "software_technical_option": str(model.get("software_technical_option") or "应用软件"),
         "software_category": str(model.get("software_category") or "应用软件"),
         "manual_sections": sections,
