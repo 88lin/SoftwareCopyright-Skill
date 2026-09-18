@@ -229,8 +229,9 @@ def check_environment_gate(out: Path) -> None:
     if not confirmed:
         raise SystemExit(
             "STOP_FOR_USER\n"
-            "NEXT_ACTION: 完整 DOCX 环境未确认。请先让用户选择安装完整环境或使用基础 DOCX 兜底继续，"
-            "然后运行 `python3 <SKILL_DIR>/scripts/confirm_stage.py --workdir 软件著作权申请资料 --stage environment --note \"<用户选择>\"`。"
+            "NEXT_ACTION: OfficeCLI 环境尚未就绪或未确认。请先安装/配置环境检查中指定的固定版本；"
+            "如果用户明确选择使用未经验证的版本，记录其选择后再运行 "
+            "`python3 <SKILL_DIR>/scripts/confirm_stage.py --workdir 软件著作权申请资料 --stage environment --note \"<用户选择>\"`。"
         )
 
 

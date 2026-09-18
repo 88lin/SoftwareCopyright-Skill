@@ -1,87 +1,83 @@
 #!/usr/bin/env python3
-"""Check runtime capabilities at the beginning of the workflow."""
+"""Check Python and pinned OfficeCLI capabilities before the workflow starts."""
 
 from __future__ import annotations
 
 import argparse
-import importlib.util
-import shutil
-import subprocess
+import platform
+import sys
 from pathlib import Path
 from typing import Any
 
 from common import ensure_dir, write_json
+from officecli_backend import (
+    OFFICECLI_DOWNLOAD_URL,
+    TESTED_OFFICECLI_VERSION,
+    OfficeCli,
+    OfficeCliError,
+    resolve_officecli,
+)
 
 
-def command_version(command: list[str]) -> tuple[bool, str]:
-    if not shutil.which(command[0]):
-        return False, "not found"
-    try:
-        completed = subprocess.run(command, text=True, capture_output=True, timeout=20)
-        output = (completed.stdout or completed.stderr).strip().splitlines()
-        return completed.returncode == 0, output[0] if output else "available"
-    except Exception as exc:
-        return False, str(exc)
+def check_environment(officecli_path: str | None = None) -> dict[str, Any]:
+    resolved = resolve_officecli(officecli_path)
+    version = "not found"
+    error = ""
+    if resolved:
+        try:
+            version = OfficeCli(resolved, require_tested_version=False).version
+        except OfficeCliError as exc:
+            error = str(exc)
 
+    officecli_available = resolved is not None and not error
+    tested_version = officecli_available and version == TESTED_OFFICECLI_VERSION
+    requires_user_input = not tested_version
+    if not officecli_available:
+        next_action = (
+            f"请安装 OfficeCLI v{TESTED_OFFICECLI_VERSION}，或设置 OFFICECLI_PATH 指向该版本可执行文件；"
+            "安装/配置完成后重新运行环境检查。"
+        )
+    else:
+        next_action = (
+            f"当前 OfficeCLI 为 {version}，请切换到已验证版本 {TESTED_OFFICECLI_VERSION}；"
+            "如确认自行承担兼容性风险，可在正式生成时显式使用 --allow-untested-officecli。"
+        )
+    if tested_version:
+        next_action = "OfficeCLI 固定版本已就绪，可以进入项目分析。"
 
-def run_docx_env(skill_dir: Path) -> tuple[bool, str]:
-    env_script = skill_dir / "vendor/docx-toolkit/scripts/env_check.sh"
-    if not env_script.exists():
-        return False, "vendor/docx-toolkit/scripts/env_check.sh not found"
-    try:
-        completed = subprocess.run(["bash", str(env_script)], text=True, capture_output=True, timeout=40)
-        return completed.returncode == 0, (completed.stdout + completed.stderr).strip()
-    except Exception as exc:
-        return False, str(exc)
-
-
-def module_available(name: str) -> bool:
-    return importlib.util.find_spec(name) is not None
-
-
-def check_environment(skill_dir: Path) -> dict[str, Any]:
-    python_docx = module_available("docx")
-    pandoc_ok, pandoc_version = command_version(["pandoc", "--version"])
-    dotnet_ok, dotnet_version = command_version(["dotnet", "--version"])
-    docx_ready, docx_output = run_docx_env(skill_dir)
-
-    final_docx_mode = "docx-openxml" if docx_ready else ("python-docx" if python_docx else "basic-ooxml")
-    requires_user_input = not docx_ready
-    next_action = (
-        "请选择：1) 安装完整 DOCX 环境；2) 使用基础 DOCX 兜底继续。回复选择后再进入项目分析。"
-        if requires_user_input
-        else "完整 DOCX 环境可用，可以进入项目分析。"
-    )
     return {
         "output_directory": "当前目录/软件著作权申请资料",
         "capabilities": {
             "markdown_drafts": True,
             "application_txt": True,
-            "basic_docx": python_docx or True,
-            "python_docx": python_docx,
-            "pandoc_preview": pandoc_ok,
-            "docx_openxml_full": docx_ready,
-            "dotnet_sdk": dotnet_ok,
+            "officecli": officecli_available,
+            "officecli_tested_version": tested_version,
+            "docx_create": tested_version,
+            "docx_openxml_validate": tested_version,
+            "docx_preview": tested_version,
+            "native_word_page_count_possible": platform.system() == "Windows",
         },
         "versions": {
-            "pandoc": pandoc_version,
-            "dotnet": dotnet_version,
+            "python": platform.python_version(),
+            "officecli": version,
+            "officecli_required": TESTED_OFFICECLI_VERSION,
         },
-        "final_docx_mode": final_docx_mode,
+        "paths": {"officecli": str(resolved) if resolved else ""},
+        "final_docx_mode": "officecli" if tested_version else "unavailable",
         "recommendation": (
-            "完整 DOCX OpenXML 环境已就绪，建议使用完整 Word 生成和校验流程。"
-            if docx_ready
-            else "完整 DOCX OpenXML 环境未就绪。可以继续使用兜底 DOCX 生成；如需更规范的 Word 结构和校验，请先安装 .NET SDK 并运行 vendor/docx-toolkit/scripts/setup.sh。"
+            f"OfficeCLI {version} 已就绪；生成时禁用自动更新并使用原子 batch 写入。"
+            if tested_version
+            else f"正式 DOCX 统一依赖 OfficeCLI v{TESTED_OFFICECLI_VERSION}，不再使用 python-docx、Pandoc 或内置 .NET 工具包兜底。"
         ),
         "install_prompt": (
-            "是否安装完整 DOCX 环境？安装后文档生成和校验更规范；不安装也可以继续生成 Markdown、TXT 和基础 DOCX。"
-            if not docx_ready
-            else "无需安装，完整环境可用。"
+            "无需安装，固定版本可用。"
+            if tested_version
+            else f"是否安装或配置 OfficeCLI v{TESTED_OFFICECLI_VERSION}？官方发布页：{OFFICECLI_DOWNLOAD_URL}"
         ),
         "requires_user_input": requires_user_input,
         "confirmation_stage": "environment" if requires_user_input else None,
         "next_action": next_action,
-        "docx_env_output": docx_output,
+        "officecli_error": error,
     }
 
 
@@ -92,16 +88,18 @@ def write_markdown(path: Path, data: dict[str, Any]) -> None:
         "",
         f"- 输出目录：`{data['output_directory']}`",
         f"- 最终 Word 模式：`{data['final_docx_mode']}`",
+        f"- Python：`{data['versions']['python']}`",
+        f"- OfficeCLI：`{data['versions']['officecli']}`（要求 `{data['versions']['officecli_required']}`）",
+        f"- OfficeCLI 路径：`{data['paths']['officecli'] or '未找到'}`",
         "",
         "## 能力状态",
         "",
         f"- Markdown 草稿：{'可用' if caps['markdown_drafts'] else '不可用'}",
         f"- 申请表 TXT：{'可用' if caps['application_txt'] else '不可用'}",
-        f"- 基础 DOCX 生成：{'可用' if caps['basic_docx'] else '不可用'}",
-        f"- python-docx：{'可用' if caps['python_docx'] else '不可用'}",
-        f"- pandoc 预览：{'可用' if caps['pandoc_preview'] else '不可用'}（{data['versions']['pandoc']}）",
-        f"- .NET SDK：{'可用' if caps['dotnet_sdk'] else '不可用'}（{data['versions']['dotnet']}）",
-        f"- DOCX OpenXML 完整环境：{'可用' if caps['docx_openxml_full'] else '不可用'}",
+        f"- OfficeCLI DOCX 生成：{'可用' if caps['docx_create'] else '不可用'}",
+        f"- OpenXML 结构校验：{'可用' if caps['docx_openxml_validate'] else '不可用'}",
+        f"- DOCX 预览：{'可用' if caps['docx_preview'] else '不可用'}",
+        f"- Word 原生页数校验：{'可能可用' if caps['native_word_page_count_possible'] else '需在 Word/WPS 中人工复核'}",
         "",
         "## 建议",
         "",
@@ -111,31 +109,31 @@ def write_markdown(path: Path, data: dict[str, Any]) -> None:
         "",
         data["install_prompt"],
         "",
-        "如果完整 DOCX 环境不可用，必须先等待用户选择，并记录 `environment` 门禁后再继续。",
-        "",
-        "```text" if data.get("requires_user_input") else "",
-        "STOP_FOR_USER" if data.get("requires_user_input") else "",
-        f"NEXT_ACTION: {data['next_action']}" if data.get("requires_user_input") else "",
-        "```" if data.get("requires_user_input") else "",
-        "",
-        "## DOCX 环境输出摘要",
-        "",
-        "```text",
-        "\n".join(data["docx_env_output"].splitlines()[:40]),
-        "```",
-        "",
     ]
+    if data.get("requires_user_input"):
+        lines.extend([
+            "OfficeCLI 缺失或版本不匹配时必须先等待用户选择，不得静默安装或退回其他 DOCX 后端。",
+            "",
+            "```text",
+            "STOP_FOR_USER",
+            f"NEXT_ACTION: {data['next_action']}",
+            "```",
+            "",
+        ])
+    if data.get("officecli_error"):
+        lines.extend(["## OfficeCLI 错误", "", "```text", data["officecli_error"], "```", ""])
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out-dir", default="软件著作权申请资料")
+    parser.add_argument("--officecli", help="OfficeCLI executable path; defaults to OFFICECLI_PATH or PATH")
     args = parser.parse_args()
-
-    skill_dir = Path(__file__).resolve().parents[1]
+    if sys.version_info < (3, 10):
+        raise SystemExit("Python 3.10+ is required")
     out_dir = ensure_dir(Path(args.out_dir))
-    data = check_environment(skill_dir)
+    data = check_environment(args.officecli)
     write_json(out_dir / "环境检查.json", data)
     write_markdown(out_dir / "环境检查.md", data)
     print(f"OK environment check: {out_dir}")

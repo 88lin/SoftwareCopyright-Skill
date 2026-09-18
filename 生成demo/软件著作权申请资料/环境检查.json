@@ -3,21 +3,26 @@
   "capabilities": {
     "markdown_drafts": true,
     "application_txt": true,
-    "basic_docx": true,
-    "python_docx": false,
-    "pandoc_preview": true,
-    "docx_openxml_full": false,
-    "dotnet_sdk": false
+    "officecli": true,
+    "officecli_tested_version": true,
+    "docx_create": true,
+    "docx_openxml_validate": true,
+    "docx_preview": true,
+    "native_word_page_count_possible": true
   },
   "versions": {
-    "pandoc": "pandoc 3.8.3",
-    "dotnet": "not found"
+    "python": "3.12.14",
+    "officecli": "1.0.151",
+    "officecli_required": "1.0.151"
   },
-  "final_docx_mode": "basic-ooxml",
-  "recommendation": "完整 DOCX OpenXML 环境未就绪。可以继续使用兜底 DOCX 生成；如需更规范的 Word 结构和校验，请先安装 .NET SDK 并运行 vendor/docx-toolkit/scripts/setup.sh。",
-  "install_prompt": "是否安装完整 DOCX 环境？安装后文档生成和校验更规范；不安装也可以继续生成 Markdown、TXT 和基础 DOCX。",
-  "requires_user_input": true,
-  "confirmation_stage": "environment",
-  "next_action": "请选择：1) 安装完整 DOCX 环境；2) 使用基础 DOCX 兜底继续。回复选择后再进入项目分析。",
-  "docx_env_output": "=== DOCX Environment Check ===\n\n[FAIL]    dotnet         not found\n\n  .NET SDK is REQUIRED. Install it:\n    brew install --cask dotnet-sdk\n\n  Or run the full setup: bash scripts/setup.sh\n\n[OK]      project        built\n[OK]      pandoc         3.8.3 (content preview)\n[WARN]    soffice        not found — .doc files cannot be converted\n           Install: brew install --cask libreoffice\n[OK]      zip/unzip      available\n[OK]      locale         C.UTF-8\n[OK]      permissions    all scripts executable\n\nStatus: NOT READY\n\nCritical dependencies missing. Run the full setup:\n  bash scripts/setup.sh          # macOS / Linux / WSL\n  powershell scripts/setup.ps1   # Windows PowerShell"
+  "paths": {
+    "officecli": "officecli"
+  },
+  "final_docx_mode": "officecli",
+  "recommendation": "OfficeCLI 1.0.151 已就绪；生成时禁用自动更新并使用原子 batch 写入。",
+  "install_prompt": "无需安装，固定版本可用。",
+  "requires_user_input": false,
+  "confirmation_stage": null,
+  "next_action": "OfficeCLI 固定版本已就绪，可以进入项目分析。",
+  "officecli_error": ""
 }

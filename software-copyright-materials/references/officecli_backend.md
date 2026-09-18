@@ -1,0 +1,44 @@
+# OfficeCLI DOCX 后端
+
+## 固定版本与边界
+
+- 已验证版本：`1.0.151`。
+- 官方发布页：https://github.com/iOfficeAI/OfficeCLI/releases/tag/v1.0.151
+- 本仓库不复制 OfficeCLI 源码或二进制；OfficeCLI 继续按其 Apache-2.0 许可证独立分发。
+- Python 保留项目分析、业务草稿、代码选择、物理行折行、分页和门禁逻辑；OfficeCLI 只负责 DOCX 创建、编辑、校验和预览。
+- 运行时设置 `OFFICECLI_SKIP_UPDATE=1` 和 `OFFICECLI_NO_AUTO_RESIDENT=1`，避免版本漂移、后台文件锁和延迟落盘。
+
+## 查找顺序
+
+脚本按以下顺序寻找可执行文件：
+
+1. `--officecli <路径>`
+2. 环境变量 `OFFICECLI_PATH`
+3. PATH 中的 `officecli` / `officecli.exe`
+
+版本缺失或不等于 `1.0.151` 时，环境检查必须停止。只有用户明确接受兼容性风险后，正式生成才允许传入 `--allow-untested-officecli`。
+
+## 写入策略
+
+- 每个 DOCX 先 `create --force --locale zh-CN`，再用一个原子 `batch --stop-on-error` 写入主要内容。
+- A4、页边距、默认字体、黑色文字、页眉和页码全部写入文档，不依赖模板文件。
+- 页眉左侧为软件全称和版本号，右侧为 PAGE 字段。
+- 操作手册先展开 OfficeCLI Markdown 子集，再统一设置中文正文格式；本地 Markdown 图片会通过 picture 元素嵌入，缺失或远程图片保留可见提示。
+- 代码材料不使用 Word 自动行号。抽取脚本先按最多 100 显示列折行（全角字符按 2 列），再按每页 50 个物理行分页；每个物理行写成一个固定行距段落，页与页之间使用 `pageBreakBefore`。
+
+## 校验策略
+
+1. `officecli validate <file> --json`：OpenXML 结构错误必须为 0，否则生成失败。
+2. `officecli view <file> issues --json`：内容/格式提示写入生成报告，不能把它误当成结构校验。
+3. Windows 且安装 Microsoft Word 时，对代码材料执行 `view stats --page-count --json`，实际页数必须与 Markdown 草稿页数一致。
+4. 生成全页联系表预览用于快速目检。OfficeCLI 的 HTML 渲染不能替代 Word/WPS 的最终分页复核。
+
+## 常用命令
+
+```bash
+officecli --version
+officecli validate output.docx --json
+officecli view output.docx issues --json
+officecli view output.docx stats --page-count --json
+officecli view output.docx screenshot --grid auto --render auto -o preview.png
+```

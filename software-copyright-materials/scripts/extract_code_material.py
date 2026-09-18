@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,7 @@ from common import COPYRIGHT_CODE_EXTS, FRONTEND_EXTS, ensure_dir, is_known_conf
 
 LINES_PER_PAGE = 50
 SPLIT_THRESHOLD_PAGES = 60
+MAX_CODE_COLUMNS = 100
 
 
 def category_weight(path: Path, project: Path) -> tuple[int, str]:
@@ -97,8 +99,46 @@ def marker_for(path: Path, project: Path) -> str:
     return f"// File: {rel(path, project)}"
 
 
-def material_code_lines(text: str) -> list[str]:
+def display_width(text: str) -> int:
+    """Return deterministic monospace display columns for Latin and CJK text."""
+    width = 0
+    for char in text:
+        width += 2 if unicodedata.east_asian_width(char) in {"W", "F"} else 1
+    return width
+
+
+def wrap_display_line(line: str, max_columns: int = MAX_CODE_COLUMNS) -> list[str]:
+    """Wrap one source line without dropping characters or relying on Word wrapping."""
+    if max_columns < 8:
+        raise ValueError("max_columns must be at least 8")
+    expanded = line.expandtabs(4)
+    if not expanded:
+        return [""]
+    segments: list[str] = []
+    current: list[str] = []
+    current_width = 0
+    for char in expanded:
+        char_width = 2 if unicodedata.east_asian_width(char) in {"W", "F"} else 1
+        if current and current_width + char_width > max_columns:
+            segments.append("".join(current))
+            current = []
+            current_width = 0
+        current.append(char)
+        current_width += char_width
+    if current:
+        segments.append("".join(current))
+    return segments
+
+
+def source_code_lines(text: str) -> list[str]:
     return [line for line in text.splitlines() if line.strip()]
+
+
+def material_code_lines(text: str, max_columns: int = MAX_CODE_COLUMNS) -> list[str]:
+    lines: list[str] = []
+    for source_line in source_code_lines(text):
+        lines.extend(wrap_display_line(source_line, max_columns))
+    return lines
 
 
 def load_selected_files(project: Path, selection_path: Path | None) -> list[dict[str, Any]]:
@@ -150,12 +190,14 @@ def collect_code_lines(project: Path, selection_path: Path | None) -> tuple[list
             continue
         text = read_text(path)
         source_lines = text.splitlines()
+        selected_source_lines = source_code_lines(text)
         selected_lines = material_code_lines(text)
-        if not selected_lines:
+        if not selected_source_lines:
             continue
         start = len(all_lines) + 1
         marker = marker_for(path, project)
-        all_lines.append(marker)
+        marker_lines = wrap_display_line(marker)
+        all_lines.extend(marker_lines)
         all_lines.extend(selected_lines)
         end = len(all_lines)
         source_end_line = len(source_lines)
@@ -163,10 +205,11 @@ def collect_code_lines(project: Path, selection_path: Path | None) -> tuple[list
             {
                 "path": rel(path, project),
                 "source_line_count": len(source_lines),
-                "blank_line_count": len(source_lines) - len(selected_lines),
+                "blank_line_count": len(source_lines) - len(selected_source_lines),
                 "selected_line_start": 1,
                 "selected_line_end": source_end_line,
-                "selected_line_count": len(selected_lines),
+                "selected_line_count": len(selected_source_lines),
+                "material_line_count": len(marker_lines) + len(selected_lines),
                 "material_line_start": start,
                 "material_line_end": end,
             }
@@ -197,6 +240,7 @@ def write_manifest_md(path: Path, manifest: dict[str, Any]) -> None:
         f"- 源码文件数：{manifest['file_count']}",
         f"- 材料代码行数：{manifest['material_line_count']}",
         f"- 每页行数：{manifest['lines_per_page']}",
+        f"- 单行最大显示宽度：{manifest['max_code_columns']} 列",
         f"- 总页数：{manifest['total_pages']}",
         f"- 目标页数：{manifest['target_pages']}",
         f"- 候选源码可生成页数：{manifest['available_candidate_pages']}",
@@ -205,14 +249,15 @@ def write_manifest_md(path: Path, manifest: dict[str, Any]) -> None:
         "",
         "## 文件来源",
         "",
-        "| 文件 | 源码行数 | 抽取源码范围 | 抽取行数 | 材料行范围 |",
-        "| --- | ---: | --- | ---: | --- |",
+        "| 文件 | 源码行数 | 抽取源码范围 | 抽取源码行数 | 材料物理行数 | 材料行范围 |",
+        "| --- | ---: | --- | ---: | ---: | --- |",
     ]
     for item in manifest["files"]:
         lines.append(
             f"| `{item['path']}` | {item['source_line_count']} | "
             f"{item['selected_line_start']}-{item['selected_line_end']} | "
             f"{item['selected_line_count']} | "
+            f"{item['material_line_count']} | "
             f"{item['material_line_start']}-{item['material_line_end']} |"
         )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -265,6 +310,7 @@ def extract(project: Path, out_dir: Path, software_name: str, version: str, line
         "source_line_count": sum(item["source_line_count"] for item in files),
         "selected_source_line_count": sum(item["selected_line_count"] for item in files),
         "lines_per_page": lines_per_page,
+        "max_code_columns": MAX_CODE_COLUMNS,
         "total_pages": total_pages,
         "target_pages": SPLIT_THRESHOLD_PAGES,
         "available_candidate_line_count": available_lines,

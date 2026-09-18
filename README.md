@@ -55,8 +55,7 @@ software-copyright-materials/
 │   ├── SKILL.md
 │   ├── agents/
 │   ├── references/
-│   ├── scripts/
-│   └── vendor/
+│   └── scripts/
 └── 生成demo/
     └── 软件著作权申请资料/
         ├── 草稿/
@@ -105,18 +104,22 @@ cp -R software-copyright-materials "$PROJECT_SKILLS_DIR/"
 ### 必需环境
 
 - **支持 Skill 的 coding agent 软件**：能够从本地 skill 目录加载 `software-copyright-materials/`。
-- **Python 3.10+ 和 python-docx**：生成流程依赖 `software-copyright-materials/scripts/` 下的 Python 脚本，用于分析项目、生成草稿、抽取真实代码、校验字段和生成正式资料。
+- **Python 3.10+**：用于项目分析、草稿生成、代码抽取、门禁和 OfficeCLI 命令编排；无需 `python-docx`。
+- **OfficeCLI 1.0.151**：正式 Word 统一由 OfficeCLI 生成和校验。仓库不再内置 DOCX skill、.NET 工具包或二进制文件。
 - **可读取的项目源码**：代码材料必须从真实项目中抽取，所以需要在代码助手中打开或指定你的项目目录。
 
-安装 Python 依赖：
+安装并确认 OfficeCLI 固定版本：
 
 ```bash
-python3 -m pip install python-docx
+officecli --version
+# 预期输出：1.0.151
 ```
 
-### 可选环境
+请从 [OfficeCLI v1.0.151 官方发布页](https://github.com/iOfficeAI/OfficeCLI/releases/tag/v1.0.151) 下载对应系统和架构的可执行文件。可以把它加入 PATH；也可以不改 PATH，改为设置 `OFFICECLI_PATH` 指向可执行文件。生成脚本会禁用 OfficeCLI 自动更新，以避免同一份材料因工具版本漂移产生不同结果。
 
-- **.NET SDK 8.0+**：用于启用更完整的 DOCX OpenXML 生成和校验能力。没有 .NET SDK 也可以继续使用基础 DOCX 兜底生成。
+### 可选能力
+
+- **Microsoft Word（Windows）**：OfficeCLI 可调用 Word 取得原生页数，用于核对代码材料的 30/60 页边界。没有 Word 时仍可生成、做 OpenXML 校验和 OfficeCLI HTML 预览，但提交前必须在 Word 或 WPS 中人工复核分页。本项目统一使用 OfficeCLI。
 - **Chrome DevTools MCP**：只有在你希望自动截取网页截图时才需要。
 - **桌面控制能力**：仅在你的 coding agent 软件支持并且需要操作桌面界面或截图时使用。
 - **用户自行截图**：如果没有 MCP 或桌面控制能力，也可以手动把截图放到指定目录，或者直接跳过截图。
@@ -132,17 +135,17 @@ python3 -m pip install python-docx
 
 环境检查会告诉你：
 
-- Markdown 草稿、TXT、基础 DOCX 是否可用。
-- 完整 DOCX OpenXML 环境是否可用。
-- `.NET SDK` 是否缺失。
+- Markdown 草稿、TXT、OfficeCLI DOCX、OpenXML 校验和预览是否可用。
+- 当前 OfficeCLI 路径和版本是否为固定验证版本 `1.0.151`。
+- 当前平台是否可能使用 Word 原生页数校验。
 - 当前会把材料生成到哪里。
 
-如果完整 DOCX 环境缺失，代码助手会停下来让你选择：
+如果 OfficeCLI 缺失或版本不匹配，代码助手会停下来让你选择：
 
-1. 安装完整 DOCX 环境。
-2. 使用基础 DOCX 兜底继续。
+1. 安装/切换到固定验证版本 `1.0.151`。
+2. 明确承担兼容性风险并使用其他版本（生成时必须显式传入 `--allow-untested-officecli`）。
 
-它不会在你不确认的情况下静默安装依赖。截图也一样，会先让你选择 Chrome DevTools MCP、coding agent 桌面控制能力、用户自行截图或跳过截图；如果你跳过截图，操作手册里会保留可见的截图预留位置。
+没有可用 OfficeCLI 时不会伪装生成 DOCX，也不会自动回退到另一套写入实现。它不会在你不确认的情况下静默安装依赖。截图也一样，会先让你选择 Chrome DevTools MCP、coding agent 桌面控制能力、用户自行截图或跳过截图；如果你跳过截图，操作手册里会保留可见的截图预留位置。
 
 ## 基本使用
 

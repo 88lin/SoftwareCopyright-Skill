@@ -5,18 +5,14 @@ description: >
   Use this skill when the user asks for 软件著作权, 软著申请资料, 软著代码材料,
   操作手册, 申请表信息, or wants Word/TXT materials for software copyright registration.
   The workflow analyzes the imported project, extracts real source code, creates Markdown
-  drafts for user confirmation, then uses bundled DOCX tooling to produce final
+  drafts for user confirmation, then uses a pinned OfficeCLI backend to produce final
   Word documents and TXT.
-user-invocable: true
-compatibility: >
-  Requires Python 3.10+ with python-docx (pip install python-docx).
-  Optional: .NET SDK 8.0+ for full OpenXML DOCX validation (run vendor/docx-toolkit/scripts/setup.sh).
 allowed-tools: >
   Bash, Read, Write, Edit, Glob, Grep, WebSearch, WebFetch
 metadata:
   short-description: 生成软著申请资料 Word/TXT
   author: Fokkyp
-  version: "1.3"
+  version: "2.0"
   repository: https://github.com/Fokkyp/SoftwareCopyright-Skill
 ---
 
@@ -44,7 +40,9 @@ metadata:
 - 操作手册生成必须同步输出 `草稿/操作手册自检记录.md` 和 `草稿/操作手册自检记录.json`，记录初稿、按项目流程扩写、去制式表达等自检轮次；如果前 3 轮仍发现问题，必须继续补写修正，直到问题清零或记录无法自动修复的原因后再停止。
 - 截图方式必须先让用户选择：Chrome DevTools MCP、Codex Computer Use、用户自行截图。用户选完后，再检查当前 MCP / Computer Use 能力是否可用；如果用户说现在不截图、先跳过截图或截图失败，操作手册仍必须保留清晰可见的截图预留位置，正式 Word 中也要能看到。
 - 申请表信息中的硬件/系统环境必须让用户确认或填写，不能硬编码。
-- Word 生成能力必须使用本 skill 内置的 `vendor/docx-toolkit`；不得引用外部 DOCX 目录。
+- Word 生成统一使用 OfficeCLI 后端；Python 只负责业务分析、代码抽取、门禁和命令编排，不直接写 OOXML。
+- OfficeCLI 固定验证版本为 `1.0.151`，运行时必须设置 `OFFICECLI_SKIP_UPDATE=1`，不得静默升级、静默安装或回退到 python-docx/Pandoc/.NET 工具包。
+- OfficeCLI 的安装、批处理、分页与校验细节见 `references/officecli_backend.md`。
 
 ## 强制人工门禁
 
@@ -58,7 +56,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/confirm_stage.py --workdir 软件著作权�
 
 必须停住的门禁：
 
-- `environment`：完整 DOCX 环境缺失时，用户必须选择“安装完整环境”或“使用基础 DOCX 兜底继续”。
+- `environment`：OfficeCLI 缺失或版本不匹配时，用户必须选择安装/配置固定版本，或明确承担使用未经验证版本的风险。
 - `project`：存在多个项目候选目录时，用户必须指定项目目录。
 - `business`：`草稿/业务理解.md` 生成后，用户必须确认行业、目标用户、核心功能和申请口径。
 - `application-fields`：`草稿/申请表信息.md` 生成后，用户必须补全并确认硬件、系统环境、著作权人、日期等字段。
@@ -85,15 +83,16 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/check_environment.py \
 环境检查必须告诉用户：
 
 - 当前会在“当前目录/软件著作权申请资料”下生成材料。
-- Markdown 草稿、TXT、基础 DOCX 是否可用。
-- 内置 `vendor/docx-toolkit` 的完整 OpenXML 环境是否可用。
-- 如 `.NET SDK` 缺失，询问用户是否安装完整环境。
+- Markdown 草稿、TXT、OfficeCLI DOCX、OpenXML 校验和预览是否可用。
+- 当前 OfficeCLI 路径、版本，以及是否等于固定验证版本 `1.0.151`。
+- 如 OfficeCLI 缺失或版本不匹配，询问用户是否安装/切换固定版本；不得自动下载安装。
 
 用户选择：
 
-- 如果用户愿意安装完整环境，按 `${CLAUDE_SKILL_DIR}/vendor/docx-toolkit/scripts/setup.sh` 的要求安装依赖，再继续。完整环境生成和校验更规范。
-- 如果用户不安装，继续使用兜底方案生成 Markdown、TXT 和基础 DOCX。
-- 如果完整 DOCX 环境缺失，必须停止并等待用户选择；不得自动继续。
+- 如果用户愿意安装，使用 OfficeCLI 官方发布页中的 `v1.0.151`，安装后重新运行环境检查。
+- 如果可执行文件未加入 PATH，允许通过 `OFFICECLI_PATH` 或脚本参数 `--officecli <路径>` 指定。
+- 如果用户坚持使用其他版本，必须先记录 `environment` 门禁，正式生成时显式传入 `--allow-untested-officecli`。
+- 没有可用 OfficeCLI 时只能继续生成/修改 Markdown 草稿和 TXT，不得生成伪成功的 DOCX。
 
 用户回复后记录门禁：
 
@@ -104,7 +103,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/confirm_stage.py \
   --note "<用户选择>"
 ```
 
-不要等到最后验证阶段才发现完整 DOCX 环境不可用；这个信息必须在流程开始时给出。
+不要等到最后验证阶段才发现 OfficeCLI 不可用；这个信息必须在流程开始时给出。
 
 ### 2. 定位项目
 
@@ -458,6 +457,8 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/build_docx_from_md.py \
 
 正式生成脚本必须重新读取 `草稿/申请表信息.md` 中已确认的“软件全称”和“版本号”，并用它们生成正式资料文件名、代码 Word 页眉和操作手册 Word 页眉。操作手册页眉必须与代码材料页眉格式一致：左侧为“软件全称 版本号”，右侧为“第 <页码> 页”。若命令参数 `--software-name` / `--version` 与申请表字段不同，以申请表字段为准，并在 `正式资料/生成报告.md` 中记录提示。
 
+生成脚本通过 OfficeCLI 原子 batch 写入 DOCX，并关闭自动更新与后台 resident。代码草稿中的每个物理行对应一个 Word 段落；超过 100 显示列的源码行在抽取阶段确定性折行，然后每 50 个物理行分页。不要启用 Word 自动行号替代源码行处理。
+
 输出：
 
 - `正式资料/申请表信息.txt`
@@ -482,19 +483,20 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/build_docx_from_md.py \
 
 ```bash
 python3 -m py_compile ${CLAUDE_SKILL_DIR}/scripts/*.py
-bash ${CLAUDE_SKILL_DIR}/vendor/docx-toolkit/scripts/docx_preview.sh <生成的docx>
+officecli validate <生成的docx> --json
+officecli view <生成的docx> issues --json
+officecli view <生成的代码docx> stats --page-count --json
+officecli view <生成的docx> screenshot --grid auto --render auto -o <预览.png>
 ```
 
-完整 DOCX 环境检查和安装必须直接恢复/构建 `${CLAUDE_SKILL_DIR}/vendor/docx-toolkit/scripts/dotnet/DocxToolkit.Cli/DocxToolkit.Cli.csproj`，不要对 `vendor/docx-toolkit/scripts/dotnet` 目录或 `.slnx` 文件执行隐式 restore/build。
-
-如果 `环境检查.md` 或 `${CLAUDE_SKILL_DIR}/vendor/docx-toolkit/scripts/env_check.sh` 显示 `.NET SDK` 缺失，说明完整 DOCX OpenXML 校验环境未就绪。用户明确选择不安装并记录 `environment` 门禁后，继续生成 Markdown、TXT 和基础 DOCX，并在报告中说明当前使用兜底路径。
+`validate` 只证明 OpenXML 结构可读，不能证明分页正确。Windows 且安装 Word 时由 OfficeCLI 使用 `stats --page-count` 做原生分页校验；其他环境先用 OfficeCLI HTML 预览，再用 Word/WPS 打开最终文件复核页数。只使用 OfficeCLI 后端，不引入其他 DOCX 渲染依赖。
 
 ## 何时询问用户
 
 以下场景必须询问并停止，等待用户输入后再继续：
 
 - 多个项目候选目录需要选择。
-- 启动环境检查发现完整 DOCX 环境缺失时，询问用户是否安装完整环境。
+- 启动环境检查发现 OfficeCLI 缺失或版本不匹配时，询问用户是否安装/切换固定版本。
 - 业务理解草稿生成后，请用户确认软件用途、行业、目标用户、核心功能和申请口径。
 - 软件全称、著作权人、日期、硬件/系统环境等登记字段需要确认。
 - 代码文件候选清单生成后，需要用户确认或修改 `代码文件选择.json`。
