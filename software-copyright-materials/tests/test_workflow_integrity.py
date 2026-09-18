@@ -5,12 +5,14 @@ import shutil
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from capture_screenshots import collect_screenshots  # noqa: E402
+from check_environment import check_environment  # noqa: E402
 from common import confirmation_is_current, read_json  # noqa: E402
 from confirm_stage import (
     REQUIRED_FIELDS,
@@ -34,6 +36,19 @@ class WorkflowIntegrityTests(unittest.TestCase):
         manifest = {"source_line_count": 400, "selected_source_line_count": 350}
 
         self.assertEqual(total_source_line_count(analysis, manifest), 980)
+
+    def test_officecli_install_waits_for_codex_restart_when_path_is_stale(self) -> None:
+        installed = self.temp_dir / "OfficeCLI" / "officecli.exe"
+        with (
+            patch("check_environment.resolve_officecli", return_value=None),
+            patch("check_environment.pending_windows_officecli_install", return_value=installed),
+        ):
+            result = check_environment()
+
+        self.assertEqual(result["officecli_install_state"], "restart_required")
+        self.assertTrue(result["requires_user_input"])
+        self.assertIn("重启 Codex", result["next_action"])
+        self.assertNotIn("OFFICECLI_PATH", result["next_action"])
 
     def test_submitted_pages_are_60_for_front_back_mode(self) -> None:
         manifest = {"mode": "front30_back30", "total_pages": 143}

@@ -12,30 +12,38 @@ from typing import Any
 from common import ensure_dir, write_json
 from officecli_backend import (
     OFFICECLI_DOWNLOAD_URL,
+    OFFICECLI_INSTALL_COMMAND,
     TESTED_OFFICECLI_VERSION,
     OfficeCli,
     OfficeCliError,
+    pending_windows_officecli_install,
     resolve_officecli,
 )
 
 
-def check_environment(officecli_path: str | None = None) -> dict[str, Any]:
-    resolved = resolve_officecli(officecli_path)
+def check_environment() -> dict[str, Any]:
+    resolved = resolve_officecli()
+    pending_install = pending_windows_officecli_install() if resolved is None else None
     version = "not found"
     error = ""
     if resolved:
         try:
-            version = OfficeCli(resolved, require_tested_version=False).version
+            version = OfficeCli(require_tested_version=False).version
         except OfficeCliError as exc:
             error = str(exc)
 
     officecli_available = resolved is not None and not error
     tested_version = officecli_available and version == TESTED_OFFICECLI_VERSION
     requires_user_input = not tested_version
-    if not officecli_available:
+    if pending_install:
         next_action = (
-            f"请安装 OfficeCLI v{TESTED_OFFICECLI_VERSION}，或设置 OFFICECLI_PATH 指向该版本可执行文件；"
-            "安装/配置完成后重新运行环境检查。"
+            "OfficeCLI 已安装到官方全局目录，但当前 Codex 进程尚未获取更新后的 PATH。"
+            "请重启 Codex，回到此项目后重新运行环境检查；不要在项目目录内复制 OfficeCLI。"
+        )
+    elif not officecli_available:
+        next_action = (
+            f"请在 PowerShell 中执行官方全局安装命令：{OFFICECLI_INSTALL_COMMAND}。"
+            "安装完成后重启 Codex，回到此项目再重新运行环境检查。"
         )
     else:
         next_action = (
@@ -63,6 +71,7 @@ def check_environment(officecli_path: str | None = None) -> dict[str, Any]:
             "officecli_required": TESTED_OFFICECLI_VERSION,
         },
         "paths": {"officecli": str(resolved) if resolved else ""},
+        "officecli_install_state": "restart_required" if pending_install else ("ready" if resolved else "not_installed"),
         "final_docx_mode": "officecli" if tested_version else "unavailable",
         "recommendation": (
             f"OfficeCLI {version} 已就绪；生成时禁用自动更新并使用原子 batch 写入。"
@@ -72,7 +81,11 @@ def check_environment(officecli_path: str | None = None) -> dict[str, Any]:
         "install_prompt": (
             "无需安装，固定版本可用。"
             if tested_version
-            else f"是否安装或配置 OfficeCLI v{TESTED_OFFICECLI_VERSION}？官方发布页：{OFFICECLI_DOWNLOAD_URL}"
+            else (
+                "OfficeCLI 已全局安装；请重启 Codex 后继续。"
+                if pending_install
+                else f"是否全局安装 OfficeCLI？命令：`{OFFICECLI_INSTALL_COMMAND}`；已验证版本发布页：{OFFICECLI_DOWNLOAD_URL}"
+            )
         ),
         "requires_user_input": requires_user_input,
         "confirmation_stage": "environment" if requires_user_input else None,
@@ -91,6 +104,7 @@ def write_markdown(path: Path, data: dict[str, Any]) -> None:
         f"- Python：`{data['versions']['python']}`",
         f"- OfficeCLI：`{data['versions']['officecli']}`（要求 `{data['versions']['officecli_required']}`）",
         f"- OfficeCLI 路径：`{data['paths']['officecli'] or '未找到'}`",
+        f"- OfficeCLI 安装状态：`{data['officecli_install_state']}`",
         "",
         "## 能力状态",
         "",
@@ -112,7 +126,7 @@ def write_markdown(path: Path, data: dict[str, Any]) -> None:
     ]
     if data.get("requires_user_input"):
         lines.extend([
-            "OfficeCLI 缺失或版本不匹配时必须先等待用户选择，不得静默安装或退回其他 DOCX 后端。",
+            "OfficeCLI 缺失、需要重启 Codex 或版本不匹配时必须停止，不得静默安装或退回其他 DOCX 后端。",
             "",
             "```text",
             "STOP_FOR_USER",
@@ -128,12 +142,11 @@ def write_markdown(path: Path, data: dict[str, Any]) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out-dir", default="软件著作权申请资料")
-    parser.add_argument("--officecli", help="OfficeCLI executable path; defaults to OFFICECLI_PATH or PATH")
     args = parser.parse_args()
     if sys.version_info < (3, 10):
         raise SystemExit("Python 3.10+ is required")
     out_dir = ensure_dir(Path(args.out_dir))
-    data = check_environment(args.officecli)
+    data = check_environment()
     write_json(out_dir / "环境检查.json", data)
     write_markdown(out_dir / "环境检查.md", data)
     print(f"OK environment check: {out_dir}")

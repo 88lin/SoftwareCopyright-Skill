@@ -16,29 +16,32 @@ from typing import Any
 
 TESTED_OFFICECLI_VERSION = "1.0.151"
 OFFICECLI_DOWNLOAD_URL = "https://github.com/iOfficeAI/OfficeCLI/releases/tag/v1.0.151"
+OFFICECLI_INSTALL_URL = "https://raw.githubusercontent.com/iOfficeAI/OfficeCLI/main/install.ps1"
+OFFICECLI_INSTALL_COMMAND = f"irm {OFFICECLI_INSTALL_URL} | iex"
 
 
 class OfficeCliError(RuntimeError):
     """Raised when OfficeCLI is missing or reports a failed operation."""
 
 
-def resolve_officecli(explicit: str | Path | None = None) -> Path | None:
-    """Resolve OfficeCLI without downloading or changing the user's PATH."""
-    candidates: list[str | Path] = []
-    if explicit:
-        candidates.append(explicit)
-    if os.environ.get("OFFICECLI_PATH"):
-        candidates.append(os.environ["OFFICECLI_PATH"])
+def resolve_officecli() -> Path | None:
+    """Resolve a globally installed OfficeCLI from the current process PATH."""
     for name in ("officecli", "officecli.exe"):
         found = shutil.which(name)
         if found:
-            candidates.append(found)
-
-    for candidate in candidates:
-        path = Path(candidate).expanduser()
-        if path.is_file():
-            return path.resolve()
+            path = Path(found)
+            if path.is_file():
+                return path.resolve()
     return None
+
+
+def pending_windows_officecli_install() -> Path | None:
+    """Return the official Windows install path when PATH has not refreshed yet."""
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if os.name != "nt" or not local_app_data:
+        return None
+    path = Path(local_app_data) / "OfficeCLI" / "officecli.exe"
+    return path.resolve() if path.is_file() else None
 
 
 def officecli_environment() -> dict[str, str]:
@@ -67,12 +70,13 @@ def _parse_json_output(output: str) -> dict[str, Any]:
 
 
 class OfficeCli:
-    def __init__(self, executable: str | Path | None = None, require_tested_version: bool = True) -> None:
-        resolved = resolve_officecli(executable)
+    def __init__(self, require_tested_version: bool = True) -> None:
+        resolved = resolve_officecli()
         if resolved is None:
             raise OfficeCliError(
-                "OfficeCLI 未安装或未加入 PATH。请安装固定版本 "
-                f"v{TESTED_OFFICECLI_VERSION}，或设置 OFFICECLI_PATH 指向可执行文件：{OFFICECLI_DOWNLOAD_URL}"
+                "当前 Codex 进程无法调用全局 officecli。请按官方方式全局安装 OfficeCLI，"
+                "然后重启 Codex 再继续："
+                f"{OFFICECLI_INSTALL_COMMAND}"
             )
         self.executable = resolved
         self.version = self._read_version()

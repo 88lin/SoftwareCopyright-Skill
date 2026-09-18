@@ -527,7 +527,7 @@ def docx_checks(cli: OfficeCli, outputs: list[Path], estimated_pages: dict[Path,
 
 
 def build_all(workdir: Path, software_name: str, version: str, skip_preview: bool,
-              officecli_path: str | None = None, allow_untested_officecli: bool = False) -> dict[str, Any]:
+              allow_untested_officecli: bool = False) -> dict[str, Any]:
     workdir = ensure_dir(workdir)
     draft_dir = workdir / "草稿"
     final_dir = ensure_dir(workdir / "正式资料")
@@ -539,7 +539,7 @@ def build_all(workdir: Path, software_name: str, version: str, skip_preview: boo
     outputs: list[Path] = []
     warnings: list[str] = []
     estimated_pages: dict[Path, int] = {}
-    cli = OfficeCli(officecli_path, require_tested_version=not allow_untested_officecli)
+    cli = OfficeCli(require_tested_version=not allow_untested_officecli)
     if app_name and app_name != software_name:
         warnings.append(f"命令参数软件名称为 {software_name}，正式资料已按申请表信息软件名称 {app_name} 生成")
     if app_version and app_version != version:
@@ -652,7 +652,6 @@ def main() -> None:
     parser.add_argument("--workdir", default="软件著作权申请资料")
     parser.add_argument("--software-name", required=True)
     parser.add_argument("--version", default="V1.0")
-    parser.add_argument("--officecli", help="OfficeCLI executable path; defaults to OFFICECLI_PATH or PATH")
     parser.add_argument("--allow-untested-officecli", action="store_true")
     parser.add_argument("--skip-preview", action="store_true")
     args = parser.parse_args()
@@ -666,7 +665,7 @@ def main() -> None:
         raise SystemExit(2)
     try:
         result = build_all(workdir, args.software_name, args.version, args.skip_preview,
-                           args.officecli, args.allow_untested_officecli)
+                           args.allow_untested_officecli)
     except (OfficeCliError, ValueError) as exc:
         raise SystemExit(f"DOCX_BUILD_FAILED\n{exc}") from exc
     print(f"OK final materials: {workdir / '正式资料'}")

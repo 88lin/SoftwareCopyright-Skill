@@ -10,7 +10,7 @@ description: >
 metadata:
   short-description: 生成软著申请资料 Word/TXT
   author: Fokkyp
-  version: "2.3"
+  version: "2.4"
   repository: https://github.com/Fokkyp/SoftwareCopyright-Skill
 ---
 
@@ -69,7 +69,7 @@ metadata:
 
 必须停住的门禁：
 
-- `environment`：OfficeCLI 缺失或版本不匹配时，用户必须选择安装/配置固定版本，或明确承担使用未经验证版本的风险。
+- `environment`：OfficeCLI 缺失时必须由用户确认全局安装并在安装后重启 Codex；版本不匹配时，用户必须切换固定版本或明确承担使用未经验证版本的风险。
 - `project`：存在多个项目候选目录时，用户必须指定项目目录。
 - `business`：`草稿/业务理解.md` 生成后，用户必须确认行业、目标用户、核心功能和申请口径。
 - `application-fields`：`草稿/申请表信息.md` 生成后，用户必须补全并确认硬件、系统环境、著作权人、日期等字段。
@@ -98,12 +98,13 @@ metadata:
 - 当前会在“当前目录/软件著作权申请资料”下生成材料。
 - Markdown 草稿、TXT、OfficeCLI DOCX、OpenXML 校验和预览是否可用。
 - 当前 OfficeCLI 路径、版本，以及是否等于固定验证版本 `1.0.151`。
-- 如 OfficeCLI 缺失或版本不匹配，询问用户是否安装/切换固定版本；不得自动下载安装。
+- 如 OfficeCLI 缺失，询问用户是否使用官方命令全局安装；不得下载到项目目录或 skill 目录，也不得静默安装。
+- 如官方全局安装已完成但当前进程尚未识别，必须要求用户重启 Codex，停止当前执行，重启后重新运行环境检查。
 
 用户选择：
 
-- 如果用户愿意安装，使用 OfficeCLI 官方发布页中的 `v1.0.151`，安装后重新运行环境检查。
-- 如果可执行文件未加入 PATH，允许通过 `OFFICECLI_PATH` 或脚本参数 `--officecli <路径>` 指定。
+- 如果用户愿意安装，在 Windows PowerShell 中运行 `irm https://raw.githubusercontent.com/iOfficeAI/OfficeCLI/main/install.ps1 | iex`。安装完成后要求用户重启 Codex；不得在当前任务中假定 PATH 已刷新后继续执行。
+- 重启后先运行 `officecli --version`，再重新运行环境检查。只使用 PATH 中的全局命令，不使用 `OFFICECLI_PATH`、`--officecli` 或项目内 `工具/officecli.exe`。
 - 如果用户坚持使用其他版本，必须先记录 `environment` 门禁，正式生成时显式传入 `--allow-untested-officecli`。
 - 没有可用 OfficeCLI 时只能继续生成/修改 Markdown 草稿和 TXT，不得生成伪成功的 DOCX。
 
@@ -475,7 +476,7 @@ officecli view <生成的docx> screenshot --grid auto --render auto -o <预览.p
 以下场景必须询问并停止，等待用户输入后再继续：
 
 - 多个项目候选目录需要选择。
-- 启动环境检查发现 OfficeCLI 缺失或版本不匹配时，询问用户是否安装/切换固定版本。
+- 启动环境检查发现 OfficeCLI 缺失时，询问用户是否全局安装；安装完成后要求重启 Codex 并停止，重启后再继续。版本不匹配时询问是否切换固定版本。
 - 业务理解草稿生成后，请用户确认软件用途、行业、目标用户、核心功能和申请口径。
 - 软件全称、著作权人、日期、硬件/系统环境等登记字段需要确认。
 - 代码文件候选清单生成后，需要用户确认或修改 `代码文件选择.json`。
