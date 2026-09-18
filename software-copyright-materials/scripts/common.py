@@ -257,6 +257,14 @@ KNOWN_SOURCE_HINT_EXTS = FRONTEND_EXTS | {
 
 MAX_SOURCE_FILE_BYTES = 800_000
 
+# Shared code-document layout. The extractor uses the physical-line estimate
+# only to choose enough material; Word still performs the final pagination.
+CODE_FONT_NAME = "Consolas"
+CODE_FONT_SIZE = "8pt"
+CODE_LINE_SPACING = "13pt"
+CODE_LINES_PER_PAGE = 55
+CODE_MAX_COLUMNS = 90
+
 
 def repo_root_from_script() -> Path:
     return Path(__file__).resolve().parents[3]

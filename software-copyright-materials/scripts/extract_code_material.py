@@ -8,14 +8,25 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
-from common import FRONTEND_EXTS, ensure_dir, is_source_candidate, read_json, read_text, rel, safe_filename, write_json
+from common import (
+    CODE_LINES_PER_PAGE,
+    CODE_MAX_COLUMNS,
+    FRONTEND_EXTS,
+    ensure_dir,
+    is_source_candidate,
+    read_json,
+    read_text,
+    rel,
+    safe_filename,
+    write_json,
+)
 
 
 # Used only to estimate how much source is needed for the first/last 30-page sets.
 # Final DOCX pagination is performed by Word's layout engine without hard page breaks.
-LINES_PER_PAGE = 60
+LINES_PER_PAGE = CODE_LINES_PER_PAGE
 SPLIT_THRESHOLD_PAGES = 60
-MAX_CODE_COLUMNS = 100
+MAX_CODE_COLUMNS = CODE_MAX_COLUMNS
 
 
 def category_weight(path: Path, project: Path) -> tuple[int, str]:

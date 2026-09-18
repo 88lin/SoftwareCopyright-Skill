@@ -8,7 +8,7 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from extract_code_material import display_width, material_code_lines, paginate, wrap_display_line  # noqa: E402
+from extract_code_material import MAX_CODE_COLUMNS, display_width, material_code_lines, paginate, wrap_display_line  # noqa: E402
 
 
 class CodeLayoutTests(unittest.TestCase):
@@ -28,7 +28,7 @@ class CodeLayoutTests(unittest.TestCase):
 
     def test_material_lines_drop_blanks_and_wrap(self) -> None:
         material = material_code_lines("\nshort\n" + ("x" * 101) + "\n")
-        self.assertEqual(material, ["short", "x" * 100, "x"])
+        self.assertEqual(material, ["short", "x" * MAX_CODE_COLUMNS, "x" * (101 - MAX_CODE_COLUMNS)])
 
     def test_paginate_uses_physical_lines(self) -> None:
         pages = paginate([str(i) for i in range(101)], 50)

@@ -19,6 +19,13 @@ from build_docx_from_md import (  # noqa: E402
     prepare_manual_markdown,
     theme_font_slots,
 )
+from common import (  # noqa: E402
+    CODE_FONT_NAME,
+    CODE_FONT_SIZE,
+    CODE_LINE_SPACING,
+    CODE_LINES_PER_PAGE,
+    CODE_MAX_COLUMNS,
+)
 from officecli_backend import officecli_environment  # noqa: E402
 
 
@@ -45,7 +52,11 @@ class OfficeCliBuilderTests(unittest.TestCase):
         self.assertEqual([command["props"]["text"] for command in commands], ["a", "b", "c", "d"])
         self.assertTrue(all("pageBreakBefore" not in command["props"] for command in commands))
         self.assertTrue(all("keepLines" not in command["props"] for command in commands))
-        self.assertTrue(all(command["props"]["lineSpacing"] == "12pt" for command in commands))
+        self.assertTrue(all(command["props"]["font"] == CODE_FONT_NAME for command in commands))
+        self.assertTrue(all(command["props"]["size"] == CODE_FONT_SIZE for command in commands))
+        self.assertTrue(all(command["props"]["lineSpacing"] == CODE_LINE_SPACING for command in commands))
+        self.assertEqual(CODE_LINES_PER_PAGE, 55)
+        self.assertEqual(CODE_MAX_COLUMNS, 90)
 
     def test_parse_code_pages_preserves_page_numbers(self) -> None:
         path = self.temp_dir / "code.md"

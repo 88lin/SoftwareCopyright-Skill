@@ -11,7 +11,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
-from common import ensure_dir, read_json, safe_filename
+from common import CODE_FONT_NAME, CODE_FONT_SIZE, CODE_LINE_SPACING, ensure_dir, read_json, safe_filename
 from officecli_backend import OfficeCli, OfficeCliError, issue_count, json_data, structural_error_count
 
 
@@ -140,7 +140,7 @@ def header_commands(software_name: str, version: str) -> list[dict[str, Any]]:
 
 def document_commands(software_name: str, version: str, *, code_mode: bool, page_start: int = 1) -> list[dict[str, Any]]:
     margin = "1.8cm" if code_mode else "2.5cm"
-    default_size = "7pt" if code_mode else "10.5pt"
+    default_size = CODE_FONT_SIZE if code_mode else "10.5pt"
     commands: list[dict[str, Any]] = [
         {"command": "set", "path": "/", "props": {
             "docDefaults.font": "SimSun", "docDefaults.font.eastAsia": "SimSun",
@@ -246,9 +246,9 @@ def code_paragraph_commands(pages: list[tuple[int, list[str]]]) -> list[dict[str
     for _, lines in pages:
         for line in lines:
             commands.append({"command": "add", "parent": "/body", "type": "paragraph", "props": {
-                "text": line if line else " ", "font": "Consolas", "font.ea": "SimSun",
-                "size": "7pt", "color": "#000000", "spaceBefore": "0pt", "spaceAfter": "0pt",
-                "lineSpacing": "12pt", "lineRule": "exact",
+                "text": line if line else " ", "font": CODE_FONT_NAME, "font.ea": "SimSun",
+                "size": CODE_FONT_SIZE, "color": "#000000", "spaceBefore": "0pt", "spaceAfter": "0pt",
+                "lineSpacing": CODE_LINE_SPACING, "lineRule": "exact",
                 "widowControl": "false", "wordWrap": "false"}})
     return commands
 
