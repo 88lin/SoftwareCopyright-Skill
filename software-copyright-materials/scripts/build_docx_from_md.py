@@ -151,7 +151,7 @@ def code_paragraph_commands(pages: list[tuple[int, list[str]]]) -> list[dict[str
             commands.append({"command": "add", "parent": "/body", "type": "paragraph", "props": {
                 "text": line if line else " ", "font": "Consolas", "font.ea": "SimSun",
                 "size": "7pt", "color": "#000000", "spaceBefore": "0pt", "spaceAfter": "0pt",
-                "lineSpacing": "12pt", "lineRule": "exact", "keepLines": "true",
+                "lineSpacing": "12pt", "lineRule": "exact",
                 "widowControl": "false", "wordWrap": "false"}})
     return commands
 

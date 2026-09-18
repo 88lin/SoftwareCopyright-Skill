@@ -40,6 +40,7 @@ class OfficeCliBuilderTests(unittest.TestCase):
         commands = code_paragraph_commands([(1, ["a", "b"]), (2, ["c", "d"])])
         self.assertEqual([command["props"]["text"] for command in commands], ["a", "b", "c", "d"])
         self.assertTrue(all("pageBreakBefore" not in command["props"] for command in commands))
+        self.assertTrue(all("keepLines" not in command["props"] for command in commands))
         self.assertTrue(all(command["props"]["lineSpacing"] == "12pt" for command in commands))
 
     def test_parse_code_pages_preserves_page_numbers(self) -> None:
