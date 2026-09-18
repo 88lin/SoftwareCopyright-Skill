@@ -9,7 +9,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from common import COPYRIGHT_CODE_EXTS, FRONTEND_EXTS, count_text_lines, is_known_config_file, iter_project_files, normalize_title, read_json, read_text, rel, write_json
+from common import FRONTEND_EXTS, count_text_lines, iter_source_files, normalize_title, read_json, read_text, rel, write_json
 
 
 DEPENDENCY_FRAMEWORKS = {
@@ -135,7 +135,7 @@ def summarize_readme(project: Path) -> str:
 def analyze(project: Path) -> dict[str, Any]:
     project = project.resolve()
     package, package_path = load_package(project)
-    source_files = [p for p in iter_project_files(project, COPYRIGHT_CODE_EXTS) if not is_known_config_file(p)]
+    source_files = list(iter_source_files(project))
     frontend_files = [p for p in source_files if p.suffix.lower() in FRONTEND_EXTS]
     class_counts: Counter[str] = Counter()
     extension_counts: Counter[str] = Counter()
@@ -229,8 +229,9 @@ def check_environment_gate(out: Path) -> None:
     if not confirmed:
         raise SystemExit(
             "STOP_FOR_USER\n"
-            "NEXT_ACTION: 完整 DOCX 环境未确认。请先让用户选择安装完整环境或使用基础 DOCX 兜底继续，"
-            "然后运行 `python3 <SKILL_DIR>/scripts/confirm_stage.py --workdir 软件著作权申请资料 --stage environment --note \"<用户选择>\"`。"
+            "NEXT_ACTION: OfficeCLI 环境尚未就绪或未确认。请按环境检查提示全局安装，重启 Codex 后继续；"
+            "如果用户明确选择使用未经验证的版本，记录其选择后再运行 "
+            "`python3 <SKILL_DIR>/scripts/confirm_stage.py --workdir 软件著作权申请资料 --stage environment --note \"<用户选择>\"`。"
         )
 
 
@@ -241,6 +242,16 @@ def infer_language(extension_counts: Counter[str], frameworks: list[str]) -> str
     if extension_counts.get(".js") or extension_counts.get(".jsx"):
         langs.append("JavaScript")
     language_by_ext = {
+        ".c": "C",
+        ".cc": "C++",
+        ".cpp": "C++",
+        ".cxx": "C++",
+        ".dart": "Dart",
+        ".gd": "GDScript",
+        ".gml": "GameMaker Language",
+        ".h": "C/C++",
+        ".hh": "C++",
+        ".hpp": "C++",
         ".py": "Python",
         ".java": "Java",
         ".go": "Go",
@@ -256,6 +267,13 @@ def infer_language(extension_counts: Counter[str], frameworks: list[str]) -> str
     for ext, label in language_by_ext.items():
         if extension_counts.get(ext):
             langs.append(label)
+    represented_exts = set(language_by_ext) | {".ts", ".tsx", ".js", ".jsx"}
+    metadata_exts = {".cfg", ".conf", ".ini", ".json", ".plist", ".properties", ".toml", ".xml", ".yaml", ".yml"}
+    for ext, _ in extension_counts.most_common():
+        if ext and ext not in represented_exts and ext not in FRONTEND_EXTS and ext not in metadata_exts:
+            langs.append(f"{ext} 源码")
+        if len(dict.fromkeys(langs)) >= 5:
+            break
     if not langs:
         langs = [ext.lstrip(".").upper() for ext, _ in extension_counts.most_common(3) if ext]
     return "、".join(dict.fromkeys(langs)) or "待用户确认"
