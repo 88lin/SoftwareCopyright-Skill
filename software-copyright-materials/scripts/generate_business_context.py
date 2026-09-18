@@ -6,15 +6,18 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import zipfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
-from common import ensure_dir, iter_project_files, read_json, read_text, rel, write_json
+from common import ensure_dir, is_document_candidate, iter_project_files, read_json, read_text, rel, write_json
 
 
-DOC_EXTS = {".md", ".txt", ".rst", ".adoc"}
 MAX_DOC_CHARS = 80_000
 MAX_DOCS = 40
+MAX_DOCUMENT_FILE_BYTES = 25_000_000
+MAX_DOCUMENT_XML_BYTES = 5_000_000
 
 
 def normalize_space(text: str) -> str:
@@ -60,26 +63,84 @@ def extract_opening(text: str, limit: int = 900) -> str:
     return clean[:limit].strip()
 
 
+def extract_zip_xml_text(path: Path, member: str) -> str:
+    with zipfile.ZipFile(path) as archive:
+        info = archive.getinfo(member)
+        if info.file_size > MAX_DOCUMENT_XML_BYTES:
+            raise ValueError("document XML is too large to extract safely")
+        with archive.open(info) as stream:
+            data = stream.read(MAX_DOCUMENT_XML_BYTES + 1)
+        if len(data) > MAX_DOCUMENT_XML_BYTES:
+            raise ValueError("document XML is too large to extract safely")
+    root = ET.fromstring(data)
+    paragraphs: list[str] = []
+    for node in root.iter():
+        if not node.tag.endswith("}p"):
+            continue
+        text = "".join(child.text or "" for child in node.iter() if child.tag.endswith("}t"))
+        if text.strip():
+            paragraphs.append(text)
+    if paragraphs:
+        return "\n".join(paragraphs)[:MAX_DOC_CHARS]
+    return " ".join(node.text or "" for node in root.iter() if node.tag.endswith("}t"))[:MAX_DOC_CHARS]
+
+
+def read_project_document(path: Path) -> tuple[str, str]:
+    """Extract useful evidence text when possible and retain unsupported documents."""
+    suffix = path.suffix.lower()
+    try:
+        if suffix == ".docx":
+            return extract_zip_xml_text(path, "word/document.xml"), "已提取 DOCX 正文"
+        if suffix == ".odt":
+            return extract_zip_xml_text(path, "content.xml"), "已提取 ODT 正文"
+        if suffix == ".pdf":
+            try:
+                from pypdf import PdfReader  # type: ignore[import-not-found]
+
+                reader = PdfReader(str(path))
+                text = "\n".join((page.extract_text() or "") for page in reader.pages)
+                return text[:MAX_DOC_CHARS], "已提取 PDF 文本"
+            except Exception:
+                return "", "已发现 PDF；当前环境无法自动提取文本，请由模型直接阅读该文件"
+        if suffix in {".doc", ".wps"}:
+            return "", f"已发现 {suffix.lstrip('.').upper()} 文档；请由模型使用可用的文档工具读取"
+        return read_text(path, limit=MAX_DOC_CHARS), "已提取文本"
+    except Exception as exc:
+        return "", f"文档已发现但读取失败：{type(exc).__name__}"
+
+
 def collect_documents(project: Path) -> list[dict[str, Any]]:
     docs: list[dict[str, Any]] = []
-    for path in iter_project_files(project, DOC_EXTS):
-        if skip_doc(path, project):
+    for path in iter_project_files(project):
+        if skip_doc(path, project) or not is_document_candidate(path, project):
             continue
         try:
-            text = read_text(path, limit=MAX_DOC_CHARS)
-        except Exception:
+            size = path.stat().st_size
+        except OSError:
             continue
-        if not text.strip():
-            continue
+        if size > MAX_DOCUMENT_FILE_BYTES:
+            text = ""
+            extraction_note = "文档已发现但文件过大，未自动提取；请由模型按需直接阅读"
+        else:
+            text, extraction_note = read_project_document(path)
         docs.append(
             {
                 "path": rel(path, project),
-                "size": path.stat().st_size,
+                "size": size,
                 "headings": extract_headings(text),
                 "opening": extract_opening(text),
+                "format": path.suffix.lower().lstrip(".") or "text",
+                "text_extracted": bool(text.strip()),
+                "extraction_note": extraction_note,
             }
         )
-    docs.sort(key=lambda item: (item["path"].count("/"), item["path"]))
+    docs.sort(
+        key=lambda item: (
+            0 if Path(item["path"]).suffix.lower() in {".md", ".txt", ".rst", ".adoc", ".docx", ".pdf"} else 1,
+            item["path"].count("/"),
+            item["path"],
+        )
+    )
     return docs[:MAX_DOCS]
 
 
@@ -141,9 +202,11 @@ def write_evidence_md(path: Path, evidence: dict[str, Any]) -> None:
                 f"### {doc['path']}",
                 "",
                 f"- 大小：{doc['size']} bytes",
+                f"- 格式：{doc['format'] or 'text'}",
+                f"- 读取状态：{doc['extraction_note']}",
                 f"- 标题线索：{'；'.join(doc['headings']) if doc['headings'] else '无'}",
                 "",
-                doc["opening"],
+                doc["opening"] or "（已登记文件路径，等待模型进一步读取）",
                 "",
             ]
         )

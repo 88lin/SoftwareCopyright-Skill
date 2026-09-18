@@ -7,8 +7,8 @@ import argparse
 from pathlib import Path
 from typing import Any
 
-from common import COPYRIGHT_CODE_EXTS, FRONTEND_EXTS, ensure_dir, is_known_config_file, iter_project_files, read_json, rel, write_json
-from extract_code_material import LINES_PER_PAGE, SPLIT_THRESHOLD_PAGES, category_weight, material_code_lines, should_skip_file
+from common import FRONTEND_EXTS, ensure_dir, iter_source_files, read_json, rel, write_json
+from extract_code_material import LINES_PER_PAGE, SPLIT_THRESHOLD_PAGES, category_weight, material_code_lines
 
 
 DEFAULT_MAX_FILES = 0
@@ -38,7 +38,7 @@ def evidence_for(path: Path, project: Path) -> str:
 
 
 def build_candidates(project: Path) -> list[dict[str, Any]]:
-    files = [p for p in iter_project_files(project, COPYRIGHT_CODE_EXTS) if not should_skip_file(p) and not is_known_config_file(p)]
+    files = list(iter_source_files(project))
     files.sort(key=lambda p: category_weight(p, project))
     candidates: list[dict[str, Any]] = []
     for path in files:

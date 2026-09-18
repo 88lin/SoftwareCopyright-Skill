@@ -8,7 +8,7 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
-from common import COPYRIGHT_CODE_EXTS, FRONTEND_EXTS, ensure_dir, is_known_config_file, iter_project_files, looks_binary, read_json, read_text, rel, safe_filename, write_json
+from common import FRONTEND_EXTS, ensure_dir, is_source_candidate, read_json, read_text, rel, safe_filename, write_json
 
 
 # Used only to estimate how much source is needed for the first/last 30-page sets.
@@ -54,26 +54,7 @@ def category_weight(path: Path, project: Path) -> tuple[int, str]:
 
 
 def should_skip_file(path: Path) -> bool:
-    if path.suffix.lower() not in COPYRIGHT_CODE_EXTS:
-        return True
-    if is_known_config_file(path):
-        return True
-    if looks_binary(path):
-        return True
-    try:
-        size = path.stat().st_size
-    except OSError:
-        return True
-    if size <= 0 or size > 800_000:
-        return True
-    try:
-        sample = read_text(path, limit=20_000)
-    except Exception:
-        return True
-    lines = sample.splitlines()
-    if any(len(line) > 3000 for line in lines[:80]):
-        return True
-    return False
+    return not is_source_candidate(path)
 
 
 def selected_line_estimate(item: dict[str, Any]) -> int:

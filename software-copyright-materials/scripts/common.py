@@ -30,25 +30,6 @@ EXCLUDE_DIRS = {
     "software-copyright-materials",
 }
 
-CODE_EXTS = {
-    ".vue",
-    ".ts",
-    ".tsx",
-    ".js",
-    ".jsx",
-    ".mjs",
-    ".cjs",
-    ".css",
-    ".scss",
-    ".sass",
-    ".less",
-    ".html",
-    ".svelte",
-    ".astro",
-    ".json",
-    ".md",
-}
-
 KNOWN_CONFIG_FILES = {
     ".babelrc",
     ".eslintrc",
@@ -116,6 +97,7 @@ KNOWN_CONFIG_FILES = {
     "webpack.config.js",
     "webpack.config.ts",
     "workspace.json",
+    ".env.example",
 }
 
 FRONTEND_EXTS = {
@@ -134,23 +116,6 @@ FRONTEND_EXTS = {
     ".astro",
 }
 
-SUPPLEMENT_CODE_EXTS = {
-    ".py",
-    ".java",
-    ".go",
-    ".rs",
-    ".cs",
-    ".php",
-    ".rb",
-    ".kt",
-    ".swift",
-    ".sql",
-    ".sh",
-    ".json",
-}
-
-COPYRIGHT_CODE_EXTS = FRONTEND_EXTS | SUPPLEMENT_CODE_EXTS
-
 LOCK_FILES = {
     "package-lock.json",
     "pnpm-lock.yaml",
@@ -159,14 +124,150 @@ LOCK_FILES = {
     "bun.lock",
 }
 
+# Source discovery intentionally uses a denylist plus content detection instead
+# of an extension allowlist. New languages and engine-specific scripts should be
+# inventoried automatically; the model/user selection gate decides relevance.
+DOCUMENT_EXTS = {
+    ".adoc",
+    ".doc",
+    ".docx",
+    ".md",
+    ".odt",
+    ".pdf",
+    ".rst",
+    ".rtf",
+    ".txt",
+    ".wps",
+}
+
+BINARY_EXTS = {
+    ".7z",
+    ".a",
+    ".avi",
+    ".bin",
+    ".bmp",
+    ".class",
+    ".db",
+    ".dll",
+    ".dmg",
+    ".eot",
+    ".exe",
+    ".flac",
+    ".gif",
+    ".gz",
+    ".ico",
+    ".iso",
+    ".jar",
+    ".jpeg",
+    ".jpg",
+    ".lib",
+    ".lockb",
+    ".mov",
+    ".mp3",
+    ".mp4",
+    ".o",
+    ".obj",
+    ".ogg",
+    ".otf",
+    ".pdb",
+    ".png",
+    ".pyc",
+    ".rar",
+    ".so",
+    ".sqlite",
+    ".sqlite3",
+    ".tar",
+    ".ttf",
+    ".wav",
+    ".webm",
+    ".webp",
+    ".woff",
+    ".woff2",
+    ".xls",
+    ".xlsx",
+    ".zip",
+}
+
+NON_SOURCE_TEXT_EXTS = {
+    ".csv",
+    ".log",
+    ".tsv",
+}
+
+DOCUMENT_FILE_PREFIXES = (
+    "changelog",
+    "code_of_conduct",
+    "contributing",
+    "license",
+    "readme",
+    "security",
+)
+
+DOCUMENT_DIR_NAMES = {
+    "doc",
+    "docs",
+    "documentation",
+    "spec",
+    "specs",
+    "设计文档",
+    "需求文档",
+}
+
+DOCUMENT_NAME_HINTS = (
+    "architecture",
+    "design",
+    "manual",
+    "prd",
+    "requirement",
+    "设计",
+    "需求",
+    "手册",
+    "文档",
+    "架构",
+    "说明",
+)
+
+# Used only to keep obvious source files out of document evidence when their
+# names contain words such as "design" or "manual". It is not a discovery gate.
+KNOWN_SOURCE_HINT_EXTS = FRONTEND_EXTS | {
+    ".c",
+    ".cc",
+    ".cpp",
+    ".cs",
+    ".cxx",
+    ".dart",
+    ".gd",
+    ".gml",
+    ".go",
+    ".h",
+    ".hh",
+    ".hpp",
+    ".java",
+    ".kt",
+    ".lua",
+    ".php",
+    ".ps1",
+    ".py",
+    ".rb",
+    ".rs",
+    ".sh",
+    ".sql",
+    ".swift",
+}
+
+MAX_SOURCE_FILE_BYTES = 800_000
+
 
 def repo_root_from_script() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
 def is_excluded(path: Path) -> bool:
-    parts = set(path.parts)
-    if parts & EXCLUDE_DIRS:
+    # iter_project_files checks every directory entry while descending. Looking
+    # at all absolute path parts would wrongly exclude a project merely because
+    # one of its parent folders happens to be named "build" or like this skill,
+    # "software-copyright-materials".
+    if path.name in EXCLUDE_DIRS:
         return True
     name = path.name
     if name.startswith(".") and name not in {".env.example"}:
@@ -200,7 +301,12 @@ def read_text(path: Path, limit: int | None = None) -> str:
     data = path.read_bytes()
     if limit is not None:
         data = data[:limit]
-    for encoding in ("utf-8", "utf-8-sig", "gb18030", "latin-1"):
+    encodings = ["utf-8", "utf-8-sig", "gb18030", "latin-1"]
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+        encodings.insert(0, "utf-16")
+    if data.startswith((b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff")):
+        encodings.insert(0, "utf-32")
+    for encoding in encodings:
         try:
             return data.decode(encoding)
         except UnicodeDecodeError:
@@ -236,10 +342,71 @@ def is_known_config_file(path: Path) -> bool:
 
 def looks_binary(path: Path) -> bool:
     try:
-        chunk = path.read_bytes()[:4096]
+        chunk = path.read_bytes()[:8192]
     except Exception:
         return True
-    return b"\x00" in chunk
+    if not chunk:
+        return False
+    if path.suffix.lower() in BINARY_EXTS:
+        return True
+    if chunk.startswith((b"PK\x03\x04", b"%PDF-", b"\x1f\x8b", b"\x89PNG", b"GIF8")):
+        return True
+    if chunk.startswith((b"\xff\xfe", b"\xfe\xff", b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff")):
+        return False
+    if b"\x00" in chunk:
+        return True
+    control_count = sum(1 for byte in chunk if byte < 32 and byte not in {9, 10, 12, 13})
+    return control_count / len(chunk) > 0.02
+
+
+def is_document_candidate(path: Path, project: Path | None = None) -> bool:
+    """Return True for explicit or strongly signalled project documentation."""
+    suffix = path.suffix.lower()
+    name = path.name.lower()
+    if suffix in DOCUMENT_EXTS or name.startswith(DOCUMENT_FILE_PREFIXES):
+        return True
+    try:
+        display_path = Path(rel(path, project)) if project is not None else path
+    except ValueError:
+        display_path = path
+    directory_names = {part.lower() for part in display_path.parent.parts}
+    in_document_directory = bool(directory_names & DOCUMENT_DIR_NAMES)
+    hinted_name = any(hint in path.stem.lower() for hint in DOCUMENT_NAME_HINTS)
+    return (in_document_directory or (hinted_name and suffix not in KNOWN_SOURCE_HINT_EXTS)) and not looks_binary(path)
+
+
+def is_source_candidate(path: Path) -> bool:
+    """Detect readable source without requiring its language extension to be known."""
+    if not path.is_file() or is_known_config_file(path):
+        return False
+    suffix = path.suffix.lower()
+    name = path.name.lower()
+    if suffix in DOCUMENT_EXTS | BINARY_EXTS | NON_SOURCE_TEXT_EXTS:
+        return False
+    if name.startswith(DOCUMENT_FILE_PREFIXES):
+        return False
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return False
+    if size <= 0 or size > MAX_SOURCE_FILE_BYTES or looks_binary(path):
+        return False
+    try:
+        sample = read_text(path, limit=20_000)
+    except Exception:
+        return False
+    if not sample.strip():
+        return False
+    if any(len(line) > 3000 for line in sample.splitlines()[:80]):
+        return False
+    return any(char.isalnum() for char in sample)
+
+
+def iter_source_files(project: Path) -> Iterable[Path]:
+    """Yield source candidates using content detection, not an extension allowlist."""
+    for path in iter_project_files(project):
+        if is_source_candidate(path):
+            yield path
 
 
 def normalize_title(value: str) -> str:
