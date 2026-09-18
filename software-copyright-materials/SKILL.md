@@ -10,7 +10,7 @@ description: >
 metadata:
   short-description: 生成软著申请资料 Word/TXT
   author: Fokkyp
-  version: "2.4"
+  version: "2.5"
   repository: https://github.com/Fokkyp/SoftwareCopyright-Skill
 ---
 
@@ -379,7 +379,7 @@ metadata:
 
 然后按用户选择检查当前能力并执行：
 
-- 选择 Playwright CLI 自动截图：必须先读取 [playwright_cli_screenshots.md](references/playwright_cli_screenshots.md)，按其中的安装门禁、固定版本、命名、浏览器会话和落盘校验规则执行。不得改用只能把截图显示在会话中的浏览器工具冒充成功；每张截图都必须是 `截图原始/` 下可读取且非空的本地图片文件。
+- 选择 Playwright CLI 自动截图：必须先读取 [playwright_cli_screenshots.md](references/playwright_cli_screenshots.md)，运行其中的通用全局命令检查脚本，并按返回的可执行文件绝对路径、安装门禁、固定版本、后台服务、命名、浏览器会话和落盘校验规则执行。不得因裸命令不在 PATH 就要求重启 Codex，也不得改用只能把截图显示在会话中的浏览器工具冒充成功；每张截图都必须是 `截图原始/` 下可读取且非空的本地图片文件。
 - 选择用户自行截图：创建 `软件著作权申请资料/用户截图/`，提示用户把截图文件放入该目录；用户按操作手册模块顺序给文件名添加数字前缀后，运行下面的整理命令，把图片复制到 `软件著作权申请资料/截图/` 并生成有序的 `截图清单.json`。数字前缀按数值排序，因此 `2-主页.png` 会排在 `10-设置.png` 前面。
 - 选择跳过截图：不运行截图工具，继续保留操作手册中的可见截图预留文字；在生成报告中说明用户选择暂不截图，正式操作手册已预留截图位置。
 
