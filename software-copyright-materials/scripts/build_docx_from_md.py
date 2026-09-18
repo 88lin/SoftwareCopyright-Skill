@@ -7,11 +7,23 @@ import argparse
 import re
 import tempfile
 import time
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
 from common import ensure_dir, read_json, safe_filename
 from officecli_backend import OfficeCli, OfficeCliError, issue_count, json_data, structural_error_count
+
+
+DRAWINGML_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+THEME_FONT_TARGETS = {
+    "major.latin": "Times New Roman",
+    "major.ea": "SimSun",
+    "major.cs": "Times New Roman",
+    "minor.latin": "Times New Roman",
+    "minor.ea": "SimSun",
+    "minor.cs": "Times New Roman",
+}
 
 
 def parse_application_lines(md_path: Path) -> tuple[list[str], list[str]]:
@@ -144,6 +156,91 @@ def document_commands(software_name: str, version: str, *, code_mode: bool, page
     return commands
 
 
+def theme_xml_from_payload(payload: dict[str, Any]) -> str:
+    value = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(value, str) or not value.strip():
+        raise OfficeCliError("OfficeCLI 未返回可读取的 DOCX 主题 XML")
+    return value
+
+
+def theme_font_slots(theme_xml: str) -> dict[str, str]:
+    try:
+        root = ET.fromstring(theme_xml)
+    except ET.ParseError as exc:
+        raise OfficeCliError(f"DOCX 主题 XML 无法解析：{exc}") from exc
+    ns = {"a": DRAWINGML_NS}
+    slots: dict[str, str] = {}
+    for family in ("major", "minor"):
+        parent = root.find(f".//a:{family}Font", ns)
+        if parent is None:
+            raise OfficeCliError(f"DOCX 主题缺少 {family}Font")
+        for script in ("latin", "ea", "cs"):
+            node = parent.find(f"a:{script}", ns)
+            if node is None:
+                raise OfficeCliError(f"DOCX 主题缺少 {family}Font/{script}")
+            slots[f"{family}.{script}"] = node.get("typeface", "")
+    return slots
+
+
+def normalize_theme_fonts_xml(theme_xml: str) -> str:
+    try:
+        root = ET.fromstring(theme_xml)
+    except ET.ParseError as exc:
+        raise OfficeCliError(f"DOCX 主题 XML 无法解析：{exc}") from exc
+    ns = {"a": DRAWINGML_NS}
+    for family in ("major", "minor"):
+        parent = root.find(f".//a:{family}Font", ns)
+        if parent is None:
+            raise OfficeCliError(f"DOCX 主题缺少 {family}Font")
+        # Script-specific font entries can make WPS request fonts that the
+        # document never uses. Keep only the three deterministic fallbacks.
+        for node in list(parent):
+            if node.tag == f"{{{DRAWINGML_NS}}}font":
+                parent.remove(node)
+    for slot, typeface in THEME_FONT_TARGETS.items():
+        family, script = slot.split(".", 1)
+        node = root.find(f".//a:{family}Font/a:{script}", ns)
+        if node is None:
+            raise OfficeCliError(f"DOCX 主题缺少 {family}Font/{script}")
+        node.set("typeface", typeface)
+    ET.register_namespace("a", DRAWINGML_NS)
+    return ET.tostring(root, encoding="unicode")
+
+
+def verify_docx_theme_fonts(cli: OfficeCli, output: Path) -> dict[str, str]:
+    theme_xml = theme_xml_from_payload(cli.raw(output, "/theme"))
+    slots = theme_font_slots(theme_xml)
+    mismatches = {
+        slot: value for slot, value in slots.items()
+        if value != THEME_FONT_TARGETS[slot]
+    }
+    if mismatches:
+        details = "，".join(f"{slot}={value or '<空>'}" for slot, value in mismatches.items())
+        raise OfficeCliError(f"{output.name} 主题字体校验失败：{details}")
+    root = ET.fromstring(theme_xml)
+    font_scheme = root.find(f".//{{{DRAWINGML_NS}}}fontScheme")
+    if font_scheme is None:
+        raise OfficeCliError(f"{output.name} 主题缺少 fontScheme")
+    allowed = set(THEME_FONT_TARGETS.values())
+    unexpected = sorted({
+        node.get("typeface", "")
+        for node in font_scheme.iter()
+        if node.get("typeface") and node.get("typeface") not in allowed
+    })
+    if unexpected:
+        raise OfficeCliError(f"{output.name} 主题仍引用其他字体：{'、'.join(unexpected)}")
+    return slots
+
+
+def normalize_docx_theme_fonts(cli: OfficeCli, output: Path) -> None:
+    current = theme_xml_from_payload(cli.raw(output, "/theme"))
+    normalized = normalize_theme_fonts_xml(current)
+    # OfficeCLI 1.0.151 may report success without persisting descendant
+    # setattr operations on /theme. Replacing the complete root is reliable.
+    cli.raw_set(output, "/theme", "/a:theme", "replace", normalized)
+    verify_docx_theme_fonts(cli, output)
+
+
 def code_paragraph_commands(pages: list[tuple[int, list[str]]]) -> list[dict[str, Any]]:
     commands: list[dict[str, Any]] = []
     for _, lines in pages:
@@ -165,6 +262,7 @@ def build_code_docx(cli: OfficeCli, md_path: Path, out_path: Path, software_name
     expected_paragraphs = sum(len(lines) for _, lines in pages)
     for attempt in range(2):
         cli.create(out_path, commands)
+        normalize_docx_theme_fonts(cli, out_path)
         actual = json_data(cli.stats(out_path)).get("paragraphs")
         try:
             actual_paragraphs = int(actual)
@@ -259,6 +357,7 @@ def build_manual_docx(cli: OfficeCli, md_path: Path, out_path: Path, base_dir: P
         cli.create(out_path, commands)
         children = body_children(cli.get(out_path, "/body"))
         cli.run_batch(out_path, manual_format_commands(children, images))
+        normalize_docx_theme_fonts(cli, out_path)
     finally:
         if prepared:
             prepared.unlink(missing_ok=True)
@@ -270,12 +369,16 @@ def docx_checks(cli: OfficeCli, outputs: list[Path], estimated_pages: dict[Path,
     if render_preview:
         ensure_dir(preview_dir)
     for output in outputs:
+        verify_docx_theme_fonts(cli, output)
         validation = cli.validate(output)
         errors = structural_error_count(validation)
         if errors:
             raise OfficeCliError(f"{output.name} OpenXML 结构校验失败：{errors} 个错误")
         issues = cli.issues(output)
-        notes.append(f"- `{output.name}`：OpenXML 结构错误 0 个；内容/格式提示 {issue_count(issues)} 个。")
+        notes.append(
+            f"- `{output.name}`：主题字体已统一为宋体/Times New Roman；"
+            f"OpenXML 结构错误 0 个；内容/格式提示 {issue_count(issues)} 个。"
+        )
         estimated = estimated_pages.get(output)
         stats = cli.stats(output, native_page_count=estimated is not None)
         pages = json_data(stats).get("pages")

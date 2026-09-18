@@ -42,7 +42,7 @@ metadata:
 - 操作手册生成必须同步输出 `草稿/操作手册自检记录.md` 和 `草稿/操作手册自检记录.json`，记录初稿、按项目流程扩写、去制式表达等自检轮次；如果前 3 轮仍发现问题，必须继续补写修正，直到问题清零或记录无法自动修复的原因后再停止。
 - 截图方式必须先让用户选择：Chrome DevTools MCP、Codex Computer Use、用户自行截图。用户选完后，再检查当前 MCP / Computer Use 能力是否可用；如果用户说现在不截图、先跳过截图或截图失败，操作手册仍必须保留清晰可见的截图预留位置，正式 Word 中也要能看到。
 - 申请表信息中的硬件/系统环境必须让用户确认或填写，不能硬编码。
-- Word 生成统一使用 OfficeCLI 后端；Python 只负责业务分析、代码抽取、门禁和命令编排，不直接写 OOXML。
+- Word 生成统一使用 OfficeCLI 后端；Python 只负责业务分析、代码抽取、门禁和命令编排，不直接解包、重打包或写入 DOCX 包。OfficeCLI 完成正文写入后，必须通过 `/theme` + `raw-set` 把主题字体统一为宋体（SimSun）和 Times New Roman，并重新读取主题确认 Calibri、Calibri Light、等线等默认主题字体已消失。
 - OfficeCLI 固定验证版本为 `1.0.151`，运行时必须设置 `OFFICECLI_SKIP_UPDATE=1`，不得静默升级、静默安装或回退到 python-docx/Pandoc/.NET 工具包。
 - OfficeCLI 的安装、批处理、分页与校验细节见 `references/officecli_backend.md`。
 

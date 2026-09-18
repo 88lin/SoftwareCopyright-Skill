@@ -179,6 +179,18 @@ class OfficeCli:
     def validate(self, output: Path) -> dict[str, Any]:
         return self._run(["validate", str(output.resolve()), "--json"], timeout=180)
 
+    def raw(self, output: Path, part: str) -> dict[str, Any]:
+        return self._run(["raw", str(output.resolve()), part, "--json"], timeout=180)
+
+    def raw_set(self, output: Path, part: str, xpath: str, action: str, xml: str) -> dict[str, Any]:
+        return self._run(
+            [
+                "raw-set", str(output.resolve()), part,
+                "--xpath", xpath, "--action", action, "--xml", xml, "--json",
+            ],
+            timeout=180,
+        )
+
     def issues(self, output: Path) -> dict[str, Any]:
         return self._run(["view", str(output.resolve()), "issues", "--json"], timeout=180)
 

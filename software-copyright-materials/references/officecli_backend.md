@@ -22,6 +22,7 @@
 
 - 每个 DOCX 先 `create --force --locale zh-CN`，再用一个原子 `batch --stop-on-error` 写入主要内容。
 - A4、页边距、默认字体、黑色文字、页眉和页码全部写入文档，不依赖模板文件。
+- 主要内容完成后读取 `/theme`，把 major/minor 的拉丁、东亚和复杂文字字体统一为 Times New Roman / SimSun，再通过 OfficeCLI `raw-set` 整体替换主题根节点；不使用 Python 直接改写 DOCX 压缩包。
 - 页眉左侧为软件全称和版本号，右侧为 PAGE 字段。
 - 操作手册先展开 OfficeCLI Markdown 子集，再统一设置中文正文格式；本地 Markdown 图片会通过 picture 元素嵌入，缺失或远程图片保留可见提示。
 - 代码材料不使用 Word 自动行号。抽取脚本先按最多 100 显示列折行（全角字符按 2 列），并按每页约 60 个物理行估算前后 30 页的选材量。每个物理行写成一个固定行距段落，所有段落连续流入正文，不设置 `pageBreakBefore`；Word 根据页面可用高度自动换页。
@@ -29,9 +30,10 @@
 ## 校验策略
 
 1. `officecli validate <file> --json`：OpenXML 结构错误必须为 0，否则生成失败。
-2. `officecli view <file> issues --json`：内容/格式提示写入生成报告，不能把它误当成结构校验。
-3. Windows 且安装 Microsoft Word 时，对代码材料执行 `view stats --page-count --json`，把自动分页后的真实页数写入报告。Markdown 页分组只代表选材估算，不作为强制页数断言。
-4. 生成全页联系表预览用于快速目检。OfficeCLI 的 HTML 渲染不能替代 Word/WPS 的最终分页复核。
+2. 重新读取 `/theme`，确认六个主题字体槽均为 Times New Roman / SimSun，避免 WPS 因默认的 Calibri、Calibri Light、等线主题字体提示缺失字体。
+3. `officecli view <file> issues --json`：内容/格式提示写入生成报告，不能把它误当成结构校验。
+4. Windows 且安装 Microsoft Word 时，对代码材料执行 `view stats --page-count --json`，把自动分页后的真实页数写入报告。Markdown 页分组只代表选材估算，不作为强制页数断言。
+5. 生成全页联系表预览用于快速目检。OfficeCLI 的 HTML 渲染不能替代 Word/WPS 的最终分页复核。
 
 ## 常用命令
 

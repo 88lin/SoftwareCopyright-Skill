@@ -106,6 +106,7 @@ cp -R software-copyright-materials "$PROJECT_SKILLS_DIR/"
 - **支持 Skill 的 coding agent 软件**：能够从本地 skill 目录加载 `software-copyright-materials/`。
 - **Python 3.10+**：用于项目分析、草稿生成、代码抽取、门禁和 OfficeCLI 命令编排；无需 `python-docx`。
 - **OfficeCLI 1.0.151**：正式 Word 统一由 OfficeCLI 生成和校验。仓库不再内置 DOCX skill、.NET 工具包或二进制文件。
+- 生成完成后会继续通过 OfficeCLI 统一 DOCX 主题字体为宋体和 Times New Roman，并重新读取主题校验，避免 WPS 因默认的等线、Calibri、Calibri Light 提示缺失字体。
 - **可读取的项目源码**：代码材料必须从真实项目中抽取，所以需要在代码助手中打开或指定你的项目目录。
 
 安装并确认 OfficeCLI 固定版本：

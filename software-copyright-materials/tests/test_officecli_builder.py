@@ -10,10 +10,14 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from build_docx_from_md import (  # noqa: E402
+    THEME_FONT_TARGETS,
     code_paragraph_commands,
     header_commands,
+    normalize_docx_theme_fonts,
+    normalize_theme_fonts_xml,
     parse_code_pages,
     prepare_manual_markdown,
+    theme_font_slots,
 )
 from officecli_backend import officecli_environment  # noqa: E402
 
@@ -71,6 +75,54 @@ class OfficeCliBuilderTests(unittest.TestCase):
                 os.environ.pop("OFFICECLI_SKIP_UPDATE", None)
             if old_resident is None:
                 os.environ.pop("OFFICECLI_NO_AUTO_RESIDENT", None)
+
+    def test_theme_fonts_are_normalized_without_direct_docx_writes(self) -> None:
+        theme = (
+            '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+            "<a:themeElements><a:fontScheme>"
+            '<a:majorFont><a:latin typeface="Calibri Light"/><a:ea typeface="等线"/><a:cs typeface=""/>'
+            '<a:font script="Hans" typeface="等线 Light"/></a:majorFont>'
+            '<a:minorFont><a:latin typeface="Calibri"/><a:ea typeface="等线"/><a:cs typeface=""/></a:minorFont>'
+            "</a:fontScheme></a:themeElements></a:theme>"
+        )
+
+        normalized = normalize_theme_fonts_xml(theme)
+
+        self.assertEqual(theme_font_slots(normalized), THEME_FONT_TARGETS)
+        self.assertNotIn("Calibri", normalized)
+        self.assertNotIn("等线", normalized)
+        self.assertNotIn('script="Hans"', normalized)
+
+    def test_theme_update_uses_officecli_root_replacement_and_verifies_result(self) -> None:
+        initial = (
+            '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+            "<a:themeElements><a:fontScheme>"
+            '<a:majorFont><a:latin typeface="Calibri Light"/><a:ea typeface="等线"/><a:cs typeface=""/></a:majorFont>'
+            '<a:minorFont><a:latin typeface="Calibri"/><a:ea typeface="等线"/><a:cs typeface=""/></a:minorFont>'
+            "</a:fontScheme></a:themeElements></a:theme>"
+        )
+
+        class FakeOfficeCli:
+            def __init__(self) -> None:
+                self.theme = initial
+                self.raw_set_args: tuple[str, str, str] | None = None
+                self.raw_parts: list[str] = []
+
+            def raw(self, output: Path, part: str) -> dict[str, object]:
+                self.raw_parts.append(part)
+                return {"success": True, "data": self.theme}
+
+            def raw_set(self, output: Path, part: str, xpath: str, action: str, xml: str) -> dict[str, object]:
+                self.raw_set_args = (part, xpath, action)
+                self.theme = xml
+                return {"success": True}
+
+        cli = FakeOfficeCli()
+        normalize_docx_theme_fonts(cli, self.temp_dir / "sample.docx")  # type: ignore[arg-type]
+
+        self.assertEqual(cli.raw_set_args, ("/theme", "/a:theme", "replace"))
+        self.assertEqual(cli.raw_parts, ["/theme", "/theme"])
+        self.assertEqual(theme_font_slots(cli.theme), THEME_FONT_TARGETS)
 
 
 if __name__ == "__main__":
