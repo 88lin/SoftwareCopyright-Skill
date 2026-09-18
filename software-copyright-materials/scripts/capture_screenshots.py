@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Collect user-supplied screenshots into an ordered OfficeCLI manifest."""
+"""Collect local screenshot files into an ordered OfficeCLI manifest."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ def manual_sort_key(path: Path) -> tuple[int, int, str]:
     return (1, 0, path.name.casefold())
 
 
-def collect_manual_screenshots(
+def collect_screenshots(
     input_dir: Path,
     out_dir: Path,
     method: str = "user-supplied",
@@ -66,18 +66,16 @@ def collect_manual_screenshots(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out-dir", default="软件著作权申请资料/截图")
-    source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("--input-dir", help="Directory containing screenshots to organize")
-    source.add_argument("--manual-dir", dest="input_dir", help="Backward-compatible alias for --input-dir")
+    parser.add_argument("--input-dir", required=True, help="Directory containing screenshots to organize")
     parser.add_argument(
         "--method",
-        choices=["chrome-devtools", "computer-use", "user-supplied"],
+        choices=["playwright-cli", "user-supplied"],
         default="user-supplied",
         help="Capture method recorded in the screenshot manifest",
     )
     args = parser.parse_args()
 
-    manifest = collect_manual_screenshots(Path(args.input_dir), Path(args.out_dir), args.method)
+    manifest = collect_screenshots(Path(args.input_dir), Path(args.out_dir), args.method)
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
     if not manifest["screenshots"]:
         raise SystemExit(3)

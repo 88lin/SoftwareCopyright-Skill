@@ -10,7 +10,7 @@ description: >
 metadata:
   short-description: 生成软著申请资料 Word/TXT
   author: Fokkyp
-  version: "2.2"
+  version: "2.3"
   repository: https://github.com/Fokkyp/SoftwareCopyright-Skill
 ---
 
@@ -38,7 +38,7 @@ metadata:
 - 每个核心页面都要用普通用户视角说明页面用途、进入位置、用户可见内容、用户动作、输入限制或异常提示、结果反馈和截图预留。不得把章节写成“进入方式：/页面内容：/操作步骤：/操作规则：/操作结果与反馈：”这种字段模板；这些信息要自然合并到段落里。避免代码、框架、接口、状态管理、异步任务等技术化表达；撰写过程中由 agent 自行循环检查、扩写和修正，完整草稿完成后只向用户发起一次整体确认。
 - 操作手册必须去除明显“AI 味”：避免空泛赞美、营销口号、万能句式、每章同一结构、头中尾固定结构、过度对称的排比、没有项目细节的正确废话、频繁使用“旨在、赋能、一站式、智能化、高效便捷、显著提升、强大能力、丰富功能”等套话。每段都应能回答“这个项目里这个功能具体做什么、用户看见什么、操作后有什么结果”。
 - 操作手册生成必须同步输出 `草稿/操作手册自检记录.md` 和 `草稿/操作手册自检记录.json`，记录初稿、按项目流程扩写、去制式表达等自检轮次；如果前 3 轮仍发现问题，必须继续补写修正，直到问题清零或记录无法自动修复的原因后再停止。
-- 截图方式必须先让用户选择：Chrome DevTools MCP、Codex Computer Use、用户自行截图。用户选完后，再检查当前 MCP / Computer Use 能力是否可用；如果用户说现在不截图、先跳过截图或截图失败，操作手册仍必须保留清晰可见的截图预留位置，正式 Word 中也要能看到。
+- 截图方式只允许用户选择：Playwright CLI 自动截图或用户自行截图。用户选择自动截图后，先检查固定验证版本的 `playwright-cli` 是否可用；如果用户说现在不截图、先跳过截图或截图失败，操作手册仍必须保留清晰可见的截图预留位置，正式 Word 中也要能看到。
 - 申请表信息中的硬件/系统环境必须让用户确认或填写，不能硬编码。
 - Word 生成统一使用 OfficeCLI 后端；Python 只负责业务分析、代码抽取、门禁和命令编排，不直接解包、重打包或写入 DOCX 包。OfficeCLI 完成正文写入后，必须通过 `/theme` + `raw-set` 把主题字体统一为宋体（SimSun）和 Times New Roman，并重新读取主题确认 Calibri、Calibri Light、等线等默认主题字体已消失。
 - OfficeCLI 固定验证版本为 `1.0.151`，运行时必须设置 `OFFICECLI_SKIP_UPDATE=1`，不得静默升级、静默安装或回退到 python-docx/Pandoc/.NET 工具包。
@@ -54,6 +54,7 @@ metadata:
 - 研判业务前读 [business_understanding_rules.md](references/business_understanding_rules.md)。
 - 选择和抽取代码前读 [code_selection_rules.md](references/code_selection_rules.md) 与 [copyright_material_rules.md](references/copyright_material_rules.md)。
 - 写操作手册前读 [manual_structure.md](references/manual_structure.md)。
+- 用户选择自动截图后读 [playwright_cli_screenshots.md](references/playwright_cli_screenshots.md)。
 - 正式生成和校验 DOCX 前读 [officecli_backend.md](references/officecli_backend.md)。
 
 ## 强制人工门禁
@@ -73,7 +74,7 @@ metadata:
 - `business`：`草稿/业务理解.md` 生成后，用户必须确认行业、目标用户、核心功能和申请口径。
 - `application-fields`：`草稿/申请表信息.md` 生成后，用户必须补全并确认硬件、系统环境、著作权人、日期等字段。
 - `code-selection`：`草稿/代码文件选择.json` 生成后，用户必须确认或修改抽取文件。
-- `screenshot-method`：操作手册截图前，用户必须在 Chrome DevTools MCP、Codex Computer Use、用户自行截图三种方式中选择一种；如果用户明确说“现在不截图/先跳过截图”，记录为 `skip`。
+- `screenshot-method`：操作手册截图前，用户必须在 Playwright CLI 自动截图、用户自行截图两种方式中选择一种；如果用户明确说“现在不截图/先跳过截图”，记录为 `skip`。
 - `markdown`：全部 Markdown 草稿完成后，用户必须确认可以进入 Word/TXT 生成。
 
 ## 工作流
@@ -358,11 +359,10 @@ metadata:
 
 ### 8. 选择并获取截图
 
-操作手册草稿完成后，先停止并让用户选择截图方式，必须给出三种选项：
+操作手册草稿完成后，先停止并让用户选择截图方式，必须给出两种选项：
 
-1. Chrome DevTools MCP：适合已在浏览器中打开的 Web 项目，优先用于网页全页截图。
-2. Codex Computer Use：适合需要通过桌面应用或浏览器界面点击、切换、查看状态后截图的场景。
-3. 用户自行截图：用户自己把 PNG/JPG/JPEG/WebP 图片放入 `软件著作权申请资料/用户截图/`，agent 只负责整理和引用。
+1. Playwright CLI 自动截图：agent 启动或连接 Web 项目，按真实页面和操作流程控制浏览器，并把 PNG 截图直接保存到 `软件著作权申请资料/截图原始/`。
+2. 用户自行截图：用户自己把 PNG/JPG/JPEG/WebP 图片放入 `软件著作权申请资料/用户截图/`，agent 只负责整理和引用。
 
 如果用户明确说“现在不截图”“先跳过截图”“这次不截图”，也必须记录截图方式门禁，方法填 `skip`。跳过截图不阻塞正式资料生成，但操作手册中每个核心功能模块必须保留可见的截图预留文字，例如：`【截图预留：请在此处插入“项目管理”页面或操作结果截图。】`。不要使用 HTML 注释作为截图占位，因为正式 Word 中看不到。
 
@@ -372,18 +372,17 @@ metadata:
 <PYTHON> "<SKILL_DIR>/scripts/confirm_stage.py" \
   --workdir 软件著作权申请资料 \
   --stage screenshot-method \
-  --method <chrome-devtools|computer-use|user-supplied|skip> \
+  --method <playwright-cli|user-supplied|skip> \
   --note "<用户选择>"
 ```
 
 然后按用户选择检查当前能力并执行：
 
-- 选择 Chrome DevTools MCP：先检查当前环境实际暴露的 Chrome DevTools 工具及其文档，不要假设固定的 MCP 工具名。能力需要覆盖页面列表/当前页确认、页面读取和截图保存；可用时按模块顺序把截图保存到 `软件著作权申请资料/截图原始/`，不可用时停止并让用户重新选择。
-- 选择 Codex Computer Use：如果当前环境提供 `computer-use` skill 或等价桌面/浏览器控制工具，先读取其使用说明，再查看目标应用状态并按操作手册导航，把截图保存到 `软件著作权申请资料/截图原始/`。不要照搬旧版 `get_app_state/click/press_key` 名称；只调用当前实际提供的 API。如果截图只能显示在会话中而不能保存为文件，则说明限制，并让用户改选 Chrome DevTools MCP 或把截图放入 `用户截图/`。
+- 选择 Playwright CLI 自动截图：必须先读取 [playwright_cli_screenshots.md](references/playwright_cli_screenshots.md)，按其中的安装门禁、固定版本、命名、浏览器会话和落盘校验规则执行。不得改用只能把截图显示在会话中的浏览器工具冒充成功；每张截图都必须是 `截图原始/` 下可读取且非空的本地图片文件。
 - 选择用户自行截图：创建 `软件著作权申请资料/用户截图/`，提示用户把截图文件放入该目录；用户按操作手册模块顺序给文件名添加数字前缀后，运行下面的整理命令，把图片复制到 `软件著作权申请资料/截图/` 并生成有序的 `截图清单.json`。数字前缀按数值排序，因此 `2-主页.png` 会排在 `10-设置.png` 前面。
 - 选择跳过截图：不运行截图工具，继续保留操作手册中的可见截图预留文字；在生成报告中说明用户选择暂不截图，正式操作手册已预留截图位置。
 
-截图文件准备好后必须运行整理脚本，生成正式构建会读取的 `截图/截图清单.json`。Chrome DevTools 或 Computer Use 把 `--input-dir` 指向 `截图原始/`，并把 `--method` 改成所选方式；用户自行截图则指向 `用户截图/`：
+截图文件准备好后必须运行整理脚本，生成正式构建会读取的 `截图/截图清单.json`。Playwright CLI 自动截图把 `--input-dir` 指向 `截图原始/`、`--method` 设为 `playwright-cli`；用户自行截图则指向 `用户截图/`：
 
 ```bash
 <PYTHON> "<SKILL_DIR>/scripts/capture_screenshots.py" \
@@ -480,5 +479,5 @@ officecli view <生成的docx> screenshot --grid auto --render auto -o <预览.p
 - 业务理解草稿生成后，请用户确认软件用途、行业、目标用户、核心功能和申请口径。
 - 软件全称、著作权人、日期、硬件/系统环境等登记字段需要确认。
 - 代码文件候选清单生成后，需要用户确认或修改 `代码文件选择.json`。
-- 操作手册截图前，需要用户在 Chrome DevTools MCP、Codex Computer Use、用户自行截图三种方式中选择一种；选择后再检查对应工具是否可用。
+- 操作手册截图前，需要用户在 Playwright CLI 自动截图、用户自行截图两种方式中选择一种；选择自动截图后再检查固定验证版本是否可用。
 - 用户是否确认 Markdown 草稿并进入 Word 生成。

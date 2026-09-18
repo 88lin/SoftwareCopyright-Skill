@@ -22,6 +22,7 @@ from common import (
 
 MAIN_FUNCTION_MIN_CHARS = 500
 MAIN_FUNCTION_MAX_CHARS = 1300
+SCREENSHOT_METHODS = {"playwright-cli", "user-supplied", "skip"}
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 FIELD_LIMITS = {
     "开发的硬件环境": 50,
@@ -215,15 +216,13 @@ def parse_screenshot_method(method: str, note: str) -> str:
     value = (method or note or "").lower()
     if any(key in value for key in ("skip", "no-screenshot", "none", "不截图", "跳过", "暂不", "先不", "不要截图", "无需截图")):
         return "skip"
-    if any(key in value for key in ("chrome", "devtools", "mcp")):
-        return "chrome-devtools"
-    if any(key in value for key in ("computer", "use", "电脑", "桌面")):
-        return "computer-use"
-    if any(key in value for key in ("user", "manual", "self", "手动", "自己", "用户")):
+    if value.strip() == "1" or any(key in value for key in ("playwright", "playwright-cli", "自动截图", "自动")):
+        return "playwright-cli"
+    if value.strip() == "2" or any(key in value for key in ("user", "manual", "self", "手动", "自己", "用户")):
         return "user-supplied"
     raise SystemExit(
         "STOP_FOR_USER\n"
-        "NEXT_ACTION: 请明确截图方式：chrome-devtools、computer-use、user-supplied 或 skip。"
+        "NEXT_ACTION: 请明确截图方式：playwright-cli、user-supplied 或 skip。"
     )
 
 
@@ -267,6 +266,8 @@ def confirm_markdown(workdir: Path, note: str) -> Path:
         issues.append(selection_issue)
     if not screenshot.exists() or not read_json(screenshot).get("screenshot_method_confirmed"):
         issues.append("截图方式尚未确认")
+    elif read_json(screenshot).get("screenshot_method") not in SCREENSHOT_METHODS:
+        issues.append("截图方式已失效，请重新选择 Playwright CLI 自动截图、用户自行截图或跳过截图")
     if not fields.exists() or not read_json(fields).get("application_fields_confirmed"):
         issues.append("申请表字段尚未确认")
     else:
@@ -311,7 +312,7 @@ def main() -> None:
     parser.add_argument("--note", default="用户已确认")
     parser.add_argument(
         "--method",
-        choices=["chrome-devtools", "computer-use", "user-supplied", "skip"],
+        choices=sorted(SCREENSHOT_METHODS),
         help="Screenshot capture method when --stage screenshot-method",
     )
     args = parser.parse_args()

@@ -10,9 +10,14 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from capture_screenshots import collect_manual_screenshots  # noqa: E402
+from capture_screenshots import collect_screenshots  # noqa: E402
 from common import confirmation_is_current, read_json  # noqa: E402
-from confirm_stage import REQUIRED_FIELDS, application_field_issues, confirm_business  # noqa: E402
+from confirm_stage import (
+    REQUIRED_FIELDS,
+    application_field_issues,
+    confirm_business,
+    parse_screenshot_method,
+)  # noqa: E402
 from generate_application_info import submitted_code_page_count, total_source_line_count  # noqa: E402
 
 
@@ -42,10 +47,28 @@ class WorkflowIntegrityTests(unittest.TestCase):
         for name in ("10-settings.png", "2-home.png", "1-login.png"):
             (source / name).write_bytes(b"image")
 
-        manifest = collect_manual_screenshots(source, output)
+        manifest = collect_screenshots(source, output)
         sources = [Path(item["source"]).name for item in manifest["screenshots"]]
 
         self.assertEqual(sources, ["1-login.png", "2-home.png", "10-settings.png"])
+
+    def test_screenshot_methods_are_playwright_or_user_supplied(self) -> None:
+        self.assertEqual(parse_screenshot_method("playwright-cli", ""), "playwright-cli")
+        self.assertEqual(parse_screenshot_method("", "1"), "playwright-cli")
+        self.assertEqual(parse_screenshot_method("user-supplied", ""), "user-supplied")
+        self.assertEqual(parse_screenshot_method("", "2"), "user-supplied")
+        self.assertEqual(parse_screenshot_method("skip", ""), "skip")
+
+    def test_playwright_screenshot_manifest_records_method(self) -> None:
+        source = self.temp_dir / "截图原始"
+        output = self.temp_dir / "截图"
+        source.mkdir()
+        (source / "01-home.png").write_bytes(b"image")
+
+        manifest = collect_screenshots(source, output, method="playwright-cli")
+
+        self.assertEqual(manifest["method"], "playwright-cli")
+        self.assertEqual(manifest["status"], "ok")
 
     def test_business_edit_invalidates_confirmation(self) -> None:
         draft = self.temp_dir / "草稿"

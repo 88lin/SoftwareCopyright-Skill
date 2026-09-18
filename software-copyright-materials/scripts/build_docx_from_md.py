@@ -95,6 +95,8 @@ def confirmation_issues(workdir: Path) -> list[str]:
     screenshot = read_json_if_exists(workdir / "截图方式确认.json")
     if not screenshot.get("screenshot_method_confirmed"):
         issues.append("截图方式尚未确认：请选择截图方式后记录 `screenshot-method` 门禁")
+    elif screenshot.get("screenshot_method") not in {"playwright-cli", "user-supplied", "skip"}:
+        issues.append("截图方式已失效：请重新选择 Playwright CLI 自动截图、用户自行截图或跳过截图")
     app_md = draft_dir / "申请表信息.md"
     if app_md.exists():
         _, warnings = parse_application_lines(app_md)
@@ -553,10 +555,17 @@ def build_all(workdir: Path, software_name: str, version: str, skip_preview: boo
         if not screenshot_manifest.exists():
             warnings.append("操作手册截图未生成或未插入；操作手册应保留截图预留位置")
         else:
-            screenshot_paths, screenshot_warnings = screenshot_paths_from_manifest(screenshot_manifest, workdir)
-            warnings.extend(screenshot_warnings)
-            if not any(screenshot_paths):
-                warnings.append("操作手册截图清单为空或没有可用图片；操作手册应保留截图预留位置")
+            manifest_method = read_json_if_exists(screenshot_manifest).get("method")
+            if manifest_method != screenshot_method:
+                warnings.append(
+                    f"截图清单方式 {manifest_method or '未记录'} 与当前确认方式 {screenshot_method} 不一致；"
+                    "未沿用旧截图，操作手册应保留截图预留位置"
+                )
+            else:
+                screenshot_paths, screenshot_warnings = screenshot_paths_from_manifest(screenshot_manifest, workdir)
+                warnings.extend(screenshot_warnings)
+                if not any(screenshot_paths):
+                    warnings.append("操作手册截图清单为空或没有可用图片；操作手册应保留截图预留位置")
     app_txt, app_warnings = write_application_txt(draft_dir, final_dir)
     if app_txt:
         outputs.append(app_txt)
