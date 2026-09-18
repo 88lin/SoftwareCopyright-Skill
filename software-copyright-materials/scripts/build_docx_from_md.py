@@ -279,13 +279,69 @@ def build_code_docx(cli: OfficeCli, md_path: Path, out_path: Path, software_name
 
 
 IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
+SCREENSHOT_PLACEHOLDER_RE = re.compile(r"【截图预留：([^】]*)】")
+SCREENSHOT_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 
 
-def prepare_manual_markdown(md_path: Path, base_dir: Path, output: Path) -> list[dict[str, Any]]:
+def resolve_screenshot_path(raw_path: str, workdir: Path, manifest_path: Path) -> Path | None:
+    source = Path(raw_path)
+    if source.is_absolute():
+        candidates = [source]
+    else:
+        candidates = [
+            Path.cwd() / source,
+            workdir / source,
+            workdir.parent / source,
+            manifest_path.parent / source,
+            manifest_path.parent / source.name,
+        ]
+    for candidate in candidates:
+        if candidate.is_file() and candidate.suffix.lower() in SCREENSHOT_EXTENSIONS:
+            return candidate.resolve()
+    return None
+
+
+def screenshot_paths_from_manifest(manifest_path: Path, workdir: Path) -> tuple[list[Path | None], list[str]]:
+    data = read_json_if_exists(manifest_path)
+    entries = data.get("screenshots") or []
+    if not isinstance(entries, list):
+        return [], ["操作手册截图清单中的 screenshots 不是列表；已保留截图预留位置"]
+    paths: list[Path | None] = []
+    warnings: list[str] = []
+    for index, entry in enumerate(entries, start=1):
+        if not isinstance(entry, dict):
+            warnings.append(f"截图清单第 {index} 项格式无效；该项未插入")
+            paths.append(None)
+            continue
+        raw_path = str(entry.get("path") or "").strip()
+        if not raw_path:
+            warnings.append(f"截图清单第 {index} 项缺少 path；该项未插入")
+            paths.append(None)
+            continue
+        resolved = resolve_screenshot_path(raw_path, workdir, manifest_path)
+        if resolved is None:
+            warnings.append(f"截图清单第 {index} 项文件不存在或格式不支持：{raw_path}")
+            paths.append(None)
+            continue
+        paths.append(resolved)
+    return paths, warnings
+
+
+def prepare_manual_markdown(
+    md_path: Path,
+    base_dir: Path,
+    output: Path,
+    screenshot_paths: list[Path | None] | None = None,
+) -> list[dict[str, Any]]:
     """Replace local Markdown images with stable placeholders for later embedding."""
     images: list[dict[str, Any]] = []
     text = md_path.read_text(encoding="utf-8")
     text = re.sub(r"<!--[^>]*截图[^>]*-->", "【截图预留：请在此处插入当前功能页面或操作结果截图。】", text)
+
+    def register_image(path: Path, alt: str, origin: str) -> str:
+        placeholder = f"OCLI_IMAGE_{len(images) + 1:04d}"
+        images.append({"placeholder": placeholder, "path": path.resolve(), "alt": alt, "origin": origin})
+        return f"\n\n{placeholder}\n\n"
 
     def replace(match: re.Match[str]) -> str:
         alt = match.group(1).strip() or "操作截图"
@@ -296,11 +352,22 @@ def prepare_manual_markdown(md_path: Path, base_dir: Path, output: Path) -> list
         image_path = (base_dir / target).resolve()
         if not image_path.is_file():
             return f"\n\n【截图缺失：{target}】\n\n"
-        placeholder = f"OCLI_IMAGE_{len(images) + 1:04d}"
-        images.append({"placeholder": placeholder, "path": image_path, "alt": alt})
-        return f"\n\n{placeholder}\n\n"
+        return register_image(image_path, alt, "markdown")
 
-    output.write_text(IMAGE_RE.sub(replace, text), encoding="utf-8")
+    text = IMAGE_RE.sub(replace, text)
+    screenshot_iter = iter(screenshot_paths or [])
+
+    def replace_screenshot_placeholder(match: re.Match[str]) -> str:
+        try:
+            image_path = next(screenshot_iter)
+        except StopIteration:
+            return match.group(0)
+        if image_path is None:
+            return match.group(0)
+        alt = match.group(1).strip().rstrip("。") or "操作截图"
+        return register_image(image_path, alt, "screenshot-manifest")
+
+    output.write_text(SCREENSHOT_PLACEHOLDER_RE.sub(replace_screenshot_placeholder, text), encoding="utf-8")
     return images
 
 
@@ -343,7 +410,15 @@ def manual_format_commands(children: list[dict[str, Any]], images: list[dict[str
     return commands
 
 
-def build_manual_docx(cli: OfficeCli, md_path: Path, out_path: Path, base_dir: Path, software_name: str, version: str) -> None:
+def build_manual_docx(
+    cli: OfficeCli,
+    md_path: Path,
+    out_path: Path,
+    base_dir: Path,
+    software_name: str,
+    version: str,
+    screenshot_paths: list[Path | None] | None = None,
+) -> dict[str, int]:
     prepared: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -351,13 +426,24 @@ def build_manual_docx(cli: OfficeCli, md_path: Path, out_path: Path, base_dir: P
             encoding="utf-8", delete=False
         ) as handle:
             prepared = Path(handle.name)
-        images = prepare_manual_markdown(md_path, base_dir, prepared)
+        requested_screenshots = screenshot_paths or []
+        images = prepare_manual_markdown(md_path, base_dir, prepared, requested_screenshots)
+        manifest_image_count = sum(item.get("origin") == "screenshot-manifest" for item in images)
+        remaining_placeholders = len(SCREENSHOT_PLACEHOLDER_RE.findall(prepared.read_text(encoding="utf-8")))
         commands = document_commands(software_name, version, code_mode=False)
         commands.append({"command": "add", "parent": "/", "type": "markdown", "props": {"src": str(prepared.resolve())}})
         cli.create(out_path, commands)
         children = body_children(cli.get(out_path, "/body"))
         cli.run_batch(out_path, manual_format_commands(children, images))
         normalize_docx_theme_fonts(cli, out_path)
+        return {
+            "manifest_images": manifest_image_count,
+            "remaining_placeholders": remaining_placeholders,
+            "unused_manifest_images": max(
+                0,
+                sum(path is not None for path in requested_screenshots) - manifest_image_count,
+            ),
+        }
     finally:
         if prepared:
             prepared.unlink(missing_ok=True)
@@ -432,12 +518,18 @@ def build_all(workdir: Path, software_name: str, version: str, skip_preview: boo
     screenshot_confirmation = read_json_if_exists(workdir / "截图方式确认.json")
     screenshot_method = screenshot_confirmation.get("screenshot_method")
     screenshot_manifest = workdir / "截图/截图清单.json"
+    screenshot_paths: list[Path | None] = []
+    manual_screenshot_note = ""
     if screenshot_method == "skip":
         warnings.append("用户选择暂不截图；操作手册已保留截图预留位置")
-    elif screenshot_method and not screenshot_manifest.exists():
-        warnings.append("操作手册截图未生成或未插入；操作手册应保留截图预留位置")
-    elif screenshot_manifest.exists() and not (read_json_if_exists(screenshot_manifest).get("screenshots") or []):
-        warnings.append("操作手册截图清单为空；操作手册应保留截图预留位置")
+    elif screenshot_method:
+        if not screenshot_manifest.exists():
+            warnings.append("操作手册截图未生成或未插入；操作手册应保留截图预留位置")
+        else:
+            screenshot_paths, screenshot_warnings = screenshot_paths_from_manifest(screenshot_manifest, workdir)
+            warnings.extend(screenshot_warnings)
+            if not any(screenshot_paths):
+                warnings.append("操作手册截图清单为空或没有可用图片；操作手册应保留截图预留位置")
     app_txt, app_warnings = write_application_txt(draft_dir, final_dir)
     if app_txt:
         outputs.append(app_txt)
@@ -467,7 +559,24 @@ def build_all(workdir: Path, software_name: str, version: str, skip_preview: boo
                 renamed_manual = Path(handle.name)
             manual_source = renamed_manual
         try:
-            build_manual_docx(cli, manual_source, manual_out, draft_dir, final_software_name, final_version)
+            manual_result = build_manual_docx(
+                cli,
+                manual_source,
+                manual_out,
+                draft_dir,
+                final_software_name,
+                final_version,
+                screenshot_paths,
+            )
+            inserted = manual_result["manifest_images"]
+            remaining = manual_result["remaining_placeholders"]
+            unused = manual_result["unused_manifest_images"]
+            if inserted:
+                manual_screenshot_note = f"- `{manual_out.name}`：已通过 OfficeCLI 插入 {inserted} 张操作截图。"
+            if remaining:
+                warnings.append(f"操作手册仍有 {remaining} 个截图预留位置未匹配到图片")
+            if unused:
+                warnings.append(f"截图清单有 {unused} 张图片未匹配到操作手册截图预留位置")
         finally:
             if renamed_manual:
                 renamed_manual.unlink(missing_ok=True)
@@ -477,6 +586,8 @@ def build_all(workdir: Path, software_name: str, version: str, skip_preview: boo
     docx_outputs = [path for path in outputs if path.suffix.lower() == ".docx"]
     notes = docx_checks(
         cli, docx_outputs, estimated_pages, final_dir / "预览", render_preview=not skip_preview)
+    if manual_screenshot_note:
+        notes.append(manual_screenshot_note)
     report = write_report(final_dir, outputs, warnings, notes, cli.version)
     return {"outputs": [str(path) for path in outputs], "warnings": warnings, "report": str(report)}
 

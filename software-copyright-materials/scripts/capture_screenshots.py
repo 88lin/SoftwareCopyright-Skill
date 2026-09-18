@@ -30,7 +30,12 @@ def collect_manual_screenshots(input_dir: Path, out_dir: Path) -> dict[str, obje
         target = out_dir / f"{index:02d}-{safe_name(path.stem)}{path.suffix.lower()}"
         if path.resolve() != target.resolve():
             shutil.copy2(path, target)
-        screenshots.append({"route": "", "url": "", "path": str(target), "source": str(path)})
+        screenshots.append({
+            "route": "",
+            "url": "",
+            "path": str(target.resolve()),
+            "source": str(path.resolve()),
+        })
     if not screenshots:
         errors.append({"error": f"no screenshot images found in {input_dir}"})
     manifest = {
@@ -88,7 +93,7 @@ def main() -> None:
             try:
                 page.goto(url, wait_until="networkidle", timeout=15_000)
                 page.screenshot(path=str(file_path), full_page=True)
-                screenshots.append({"route": route, "url": url, "path": str(file_path)})
+                screenshots.append({"route": route, "url": url, "path": str(file_path.resolve())})
             except Exception as exc:
                 errors.append({"route": route, "url": url, "error": str(exc)})
         browser.close()

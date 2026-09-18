@@ -13,10 +13,12 @@ from build_docx_from_md import (  # noqa: E402
     THEME_FONT_TARGETS,
     code_paragraph_commands,
     header_commands,
+    manual_format_commands,
     normalize_docx_theme_fonts,
     normalize_theme_fonts_xml,
     parse_code_pages,
     prepare_manual_markdown,
+    screenshot_paths_from_manifest,
     theme_font_slots,
 )
 from common import (  # noqa: E402
@@ -73,6 +75,92 @@ class OfficeCliBuilderTests(unittest.TestCase):
         self.assertEqual(len(images), 1)
         self.assertIn("OCLI_IMAGE_0001", output.read_text(encoding="utf-8"))
         self.assertEqual(images[0]["path"], image.resolve())
+
+    def test_screenshot_manifest_images_replace_visible_placeholders_in_order(self) -> None:
+        first = self.temp_dir / "first.png"
+        second = self.temp_dir / "second.jpg"
+        first.write_bytes(b"png")
+        second.write_bytes(b"jpg")
+        source = self.temp_dir / "manual.md"
+        output = self.temp_dir / "prepared.md"
+        source.write_text(
+            "【截图预留：登录页面。】\n\n正文\n\n【截图预留：项目页面。】\n",
+            encoding="utf-8",
+        )
+
+        images = prepare_manual_markdown(source, self.temp_dir, output, [first, second])
+        prepared = output.read_text(encoding="utf-8")
+
+        self.assertEqual([item["path"] for item in images], [first.resolve(), second.resolve()])
+        self.assertEqual([item["alt"] for item in images], ["登录页面", "项目页面"])
+        self.assertTrue(all(item["origin"] == "screenshot-manifest" for item in images))
+        self.assertNotIn("【截图预留", prepared)
+        self.assertIn("OCLI_IMAGE_0001", prepared)
+        self.assertIn("OCLI_IMAGE_0002", prepared)
+
+    def test_unmatched_screenshot_placeholders_remain_visible(self) -> None:
+        image = self.temp_dir / "only.png"
+        image.write_bytes(b"png")
+        source = self.temp_dir / "manual.md"
+        output = self.temp_dir / "prepared.md"
+        source.write_text("【截图预留：第一页。】\n【截图预留：第二页。】\n", encoding="utf-8")
+
+        images = prepare_manual_markdown(source, self.temp_dir, output, [image])
+        prepared = output.read_text(encoding="utf-8")
+
+        self.assertEqual(len(images), 1)
+        self.assertIn("OCLI_IMAGE_0001", prepared)
+        self.assertIn("【截图预留：第二页。】", prepared)
+
+    def test_screenshot_manifest_paths_resolve_files_next_to_manifest(self) -> None:
+        workdir = self.temp_dir
+        image = self.temp_dir / "01-login.png"
+        image.write_bytes(b"png")
+        manifest = self.temp_dir / "截图清单.json"
+        manifest.write_text(
+            '{"screenshots": [{"path": "missing/prefix/01-login.png"}]}',
+            encoding="utf-8",
+        )
+
+        paths, warnings = screenshot_paths_from_manifest(manifest, workdir)
+
+        self.assertEqual(paths, [image.resolve()])
+        self.assertEqual(warnings, [])
+
+    def test_missing_manifest_image_does_not_shift_later_screenshots(self) -> None:
+        second = self.temp_dir / "second.png"
+        second.write_bytes(b"png")
+        manifest = self.temp_dir / "截图清单.json"
+        manifest.write_text(
+            '{"screenshots": [{"path": "missing.png"}, {"path": "second.png"}]}',
+            encoding="utf-8",
+        )
+        source = self.temp_dir / "manual.md"
+        output = self.temp_dir / "prepared.md"
+        source.write_text("【截图预留：第一页。】\n【截图预留：第二页。】\n", encoding="utf-8")
+
+        paths, warnings = screenshot_paths_from_manifest(manifest, self.temp_dir)
+        images = prepare_manual_markdown(source, self.temp_dir, output, paths)
+        prepared = output.read_text(encoding="utf-8")
+
+        self.assertEqual(paths, [None, second.resolve()])
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("【截图预留：第一页。】", prepared)
+        self.assertIn("OCLI_IMAGE_0001", prepared)
+        self.assertEqual(images[0]["alt"], "第二页")
+
+    def test_manual_picture_command_is_sent_to_officecli(self) -> None:
+        image = self.temp_dir / "screen.png"
+        image.write_bytes(b"png")
+        commands = manual_format_commands(
+            [{"type": "paragraph", "path": "/body/p[1]", "text": "OCLI_IMAGE_0001"}],
+            [{"placeholder": "OCLI_IMAGE_0001", "path": image, "alt": "登录页面"}],
+        )
+
+        picture = next(command for command in commands if command.get("type") == "picture")
+        self.assertEqual(picture["parent"], "/body/p[1]")
+        self.assertEqual(picture["props"]["src"], str(image))
+        self.assertEqual(picture["props"]["width"], "15cm")
 
     def test_environment_disables_updates_and_residents(self) -> None:
         old_update = os.environ.get("OFFICECLI_SKIP_UPDATE")
