@@ -12,7 +12,7 @@ allowed-tools: >
 metadata:
   short-description: 生成软著申请资料 Word/TXT
   author: Fokkyp
-  version: "2.0"
+  version: "2.1"
   repository: https://github.com/Fokkyp/SoftwareCopyright-Skill
 ---
 
@@ -333,7 +333,8 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/extract_code_material.py \
 
 代码分页规则：
 
-- 每页默认 50 行，并在 Word 中使用紧凑固定行距，尽量减少长行折行造成的页面溢出。
+- 选材量默认按每页约 60 个物理行估算，以满足每页不少于 50 行的要求；Markdown 页分组不等于最终 DOCX 的硬分页边界。
+- 正式 DOCX 中所有代码段落连续写入，不插入人工分页符，由 Word 按 A4 页面、页边距、字体和行距自动换页。
 - 总页数 `>= 60`：生成 `代码-前30页.md` 和 `代码-后30页.md`。
 - 总页数 `< 60` 且候选源码已用尽：只生成 `代码-全部.md`。
 - 总页数 `< 60` 但候选清单还有可补充源码：停止并要求用户在 `代码文件选择.json` 中继续选择补充文件。
@@ -457,7 +458,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/build_docx_from_md.py \
 
 正式生成脚本必须重新读取 `草稿/申请表信息.md` 中已确认的“软件全称”和“版本号”，并用它们生成正式资料文件名、代码 Word 页眉和操作手册 Word 页眉。操作手册页眉必须与代码材料页眉格式一致：左侧为“软件全称 版本号”，右侧为“第 <页码> 页”。若命令参数 `--software-name` / `--version` 与申请表字段不同，以申请表字段为准，并在 `正式资料/生成报告.md` 中记录提示。
 
-生成脚本通过 OfficeCLI 原子 batch 写入 DOCX，并关闭自动更新与后台 resident。代码草稿中的每个物理行对应一个 Word 段落；超过 100 显示列的源码行在抽取阶段确定性折行，然后每 50 个物理行分页。不要启用 Word 自动行号替代源码行处理。
+生成脚本通过 OfficeCLI 原子 batch 写入 DOCX，并关闭自动更新与后台 resident。代码草稿中的每个物理行对应一个 Word 段落；超过 100 显示列的源码行在抽取阶段确定性折行。所有代码段落连续写入正文，不设置 `pageBreakBefore`，最终分页由 Word 排版引擎自动完成；草稿中的页分组只用于选材量估算。不要启用 Word 自动行号替代源码行处理。
 
 输出：
 
@@ -489,7 +490,7 @@ officecli view <生成的代码docx> stats --page-count --json
 officecli view <生成的docx> screenshot --grid auto --render auto -o <预览.png>
 ```
 
-`validate` 只证明 OpenXML 结构可读，不能证明分页正确。Windows 且安装 Word 时由 OfficeCLI 使用 `stats --page-count` 做原生分页校验；其他环境先用 OfficeCLI HTML 预览，再用 Word/WPS 打开最终文件复核页数。只使用 OfficeCLI 后端，不引入其他 DOCX 渲染依赖。
+`validate` 只证明 OpenXML 结构可读，不能证明分页正确。Windows 且安装 Word 时由 OfficeCLI 使用 `stats --page-count` 读取自动分页后的真实页数并写入报告，不因它与草稿估算页数不同而重新插入固定分页；其他环境先用 OfficeCLI HTML 预览，再用 Word/WPS 打开最终文件复核页数。只使用 OfficeCLI 后端，不引入其他 DOCX 渲染依赖。
 
 ## 何时询问用户
 

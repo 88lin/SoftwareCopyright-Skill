@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import re
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -145,14 +146,13 @@ def document_commands(software_name: str, version: str, *, code_mode: bool, page
 
 def code_paragraph_commands(pages: list[tuple[int, list[str]]]) -> list[dict[str, Any]]:
     commands: list[dict[str, Any]] = []
-    for page_index, (_, lines) in enumerate(pages):
-        for line_index, line in enumerate(lines):
+    for _, lines in pages:
+        for line in lines:
             commands.append({"command": "add", "parent": "/body", "type": "paragraph", "props": {
                 "text": line if line else " ", "font": "Consolas", "font.ea": "SimSun",
                 "size": "7pt", "color": "#000000", "spaceBefore": "0pt", "spaceAfter": "0pt",
-                "lineSpacing": "10pt", "lineRule": "exact", "keepLines": "true",
-                "widowControl": "false", "wordWrap": "false",
-                "pageBreakBefore": "true" if page_index > 0 and line_index == 0 else "false"}})
+                "lineSpacing": "12pt", "lineRule": "exact", "keepLines": "true",
+                "widowControl": "false", "wordWrap": "false"}})
     return commands
 
 
@@ -162,8 +162,22 @@ def build_code_docx(cli: OfficeCli, md_path: Path, out_path: Path, software_name
         raise ValueError(f"代码草稿没有可识别分页：{md_path}")
     commands = document_commands(software_name, version, code_mode=True, page_start=pages[0][0])
     commands.extend(code_paragraph_commands(pages))
-    cli.create(out_path, commands)
-    return len(pages)
+    expected_paragraphs = sum(len(lines) for _, lines in pages)
+    for attempt in range(2):
+        cli.create(out_path, commands)
+        actual = json_data(cli.stats(out_path)).get("paragraphs")
+        try:
+            actual_paragraphs = int(actual)
+        except (TypeError, ValueError):
+            actual_paragraphs = -1
+        if actual_paragraphs == expected_paragraphs:
+            return len(pages)
+        if attempt == 0:
+            time.sleep(0.5)
+    raise OfficeCliError(
+        f"{out_path.name} 正文完整性校验失败：草稿 {expected_paragraphs} 个物理行，"
+        f"DOCX 只有 {actual_paragraphs} 个正文段落"
+    )
 
 
 IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
@@ -250,7 +264,7 @@ def build_manual_docx(cli: OfficeCli, md_path: Path, out_path: Path, base_dir: P
             prepared.unlink(missing_ok=True)
 
 
-def docx_checks(cli: OfficeCli, outputs: list[Path], expected_pages: dict[Path, int], preview_dir: Path,
+def docx_checks(cli: OfficeCli, outputs: list[Path], estimated_pages: dict[Path, int], preview_dir: Path,
                 render_preview: bool = True) -> list[str]:
     notes: list[str] = []
     if render_preview:
@@ -262,16 +276,25 @@ def docx_checks(cli: OfficeCli, outputs: list[Path], expected_pages: dict[Path, 
             raise OfficeCliError(f"{output.name} OpenXML 结构校验失败：{errors} 个错误")
         issues = cli.issues(output)
         notes.append(f"- `{output.name}`：OpenXML 结构错误 0 个；内容/格式提示 {issue_count(issues)} 个。")
-        expected = expected_pages.get(output)
-        stats = cli.stats(output, native_page_count=expected is not None)
+        estimated = estimated_pages.get(output)
+        stats = cli.stats(output, native_page_count=estimated is not None)
         pages = json_data(stats).get("pages")
-        if expected is not None:
+        if estimated is not None:
             if pages is None:
-                notes.append(f"- `{output.name}`：当前环境无法取得 Word 原生页数；提交前需在 Word/WPS 中复核 {expected} 页。")
-            elif int(pages) != expected:
-                raise OfficeCliError(f"{output.name} 实际分页为 {pages} 页，草稿要求 {expected} 页")
+                notes.append(
+                    f"- `{output.name}`：当前环境无法取得 Word 原生页数；草稿按 {estimated} 页估算，"
+                    "提交前需在 Word/WPS 中复核自动分页结果。"
+                )
+            elif int(pages) != estimated:
+                notes.append(
+                    f"- `{output.name}`：Word 自动分页为 {pages} 页，草稿选材估算为 {estimated} 页；"
+                    "文档未插入人工分页符。"
+                )
             else:
-                notes.append(f"- `{output.name}`：Word 原生分页 {pages} 页，与草稿一致。")
+                notes.append(
+                    f"- `{output.name}`：Word 自动分页为 {pages} 页，与草稿选材估算一致；"
+                    "文档未插入人工分页符。"
+                )
         if render_preview:
             preview = preview_dir / f"{output.stem}.png"
             try:
@@ -297,7 +320,7 @@ def build_all(workdir: Path, software_name: str, version: str, skip_preview: boo
     safe_name = safe_filename(final_software_name)
     outputs: list[Path] = []
     warnings: list[str] = []
-    expected_pages: dict[Path, int] = {}
+    estimated_pages: dict[Path, int] = {}
     cli = OfficeCli(officecli_path, require_tested_version=not allow_untested_officecli)
     if app_name and app_name != software_name:
         warnings.append(f"命令参数软件名称为 {software_name}，正式资料已按申请表信息软件名称 {app_name} 生成")
@@ -325,7 +348,7 @@ def build_all(workdir: Path, software_name: str, version: str, skip_preview: boo
         md_path = draft_dir / md_name
         if md_path.exists():
             out_path = final_dir / docx_name
-            expected_pages[out_path] = build_code_docx(cli, md_path, out_path, final_software_name, final_version)
+            estimated_pages[out_path] = build_code_docx(cli, md_path, out_path, final_software_name, final_version)
             outputs.append(out_path)
     manual_md = draft_dir / "操作手册.md"
     if manual_md.exists():
@@ -350,7 +373,7 @@ def build_all(workdir: Path, software_name: str, version: str, skip_preview: boo
         warnings.append("缺少草稿/操作手册.md")
     docx_outputs = [path for path in outputs if path.suffix.lower() == ".docx"]
     notes = docx_checks(
-        cli, docx_outputs, expected_pages, final_dir / "预览", render_preview=not skip_preview)
+        cli, docx_outputs, estimated_pages, final_dir / "预览", render_preview=not skip_preview)
     report = write_report(final_dir, outputs, warnings, notes, cli.version)
     return {"outputs": [str(path) for path in outputs], "warnings": warnings, "report": str(report)}
 

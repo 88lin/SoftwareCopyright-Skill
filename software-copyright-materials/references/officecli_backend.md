@@ -5,7 +5,7 @@
 - 已验证版本：`1.0.151`。
 - 官方发布页：https://github.com/iOfficeAI/OfficeCLI/releases/tag/v1.0.151
 - 本仓库不复制 OfficeCLI 源码或二进制；OfficeCLI 继续按其 Apache-2.0 许可证独立分发。
-- Python 保留项目分析、业务草稿、代码选择、物理行折行、分页和门禁逻辑；OfficeCLI 只负责 DOCX 创建、编辑、校验和预览。
+- Python 保留项目分析、业务草稿、代码选择、物理行折行、选材量估算和门禁逻辑；OfficeCLI 负责 DOCX 创建、编辑、校验和预览，最终分页由 Word 排版引擎自动完成。
 - 运行时设置 `OFFICECLI_SKIP_UPDATE=1` 和 `OFFICECLI_NO_AUTO_RESIDENT=1`，避免版本漂移、后台文件锁和延迟落盘。
 
 ## 查找顺序
@@ -24,13 +24,13 @@
 - A4、页边距、默认字体、黑色文字、页眉和页码全部写入文档，不依赖模板文件。
 - 页眉左侧为软件全称和版本号，右侧为 PAGE 字段。
 - 操作手册先展开 OfficeCLI Markdown 子集，再统一设置中文正文格式；本地 Markdown 图片会通过 picture 元素嵌入，缺失或远程图片保留可见提示。
-- 代码材料不使用 Word 自动行号。抽取脚本先按最多 100 显示列折行（全角字符按 2 列），再按每页 50 个物理行分页；每个物理行写成一个固定行距段落，页与页之间使用 `pageBreakBefore`。
+- 代码材料不使用 Word 自动行号。抽取脚本先按最多 100 显示列折行（全角字符按 2 列），并按每页约 60 个物理行估算前后 30 页的选材量。每个物理行写成一个固定行距段落，所有段落连续流入正文，不设置 `pageBreakBefore`；Word 根据页面可用高度自动换页。
 
 ## 校验策略
 
 1. `officecli validate <file> --json`：OpenXML 结构错误必须为 0，否则生成失败。
 2. `officecli view <file> issues --json`：内容/格式提示写入生成报告，不能把它误当成结构校验。
-3. Windows 且安装 Microsoft Word 时，对代码材料执行 `view stats --page-count --json`，实际页数必须与 Markdown 草稿页数一致。
+3. Windows 且安装 Microsoft Word 时，对代码材料执行 `view stats --page-count --json`，把自动分页后的真实页数写入报告。Markdown 页分组只代表选材估算，不作为强制页数断言。
 4. 生成全页联系表预览用于快速目检。OfficeCLI 的 HTML 渲染不能替代 Word/WPS 的最终分页复核。
 
 ## 常用命令

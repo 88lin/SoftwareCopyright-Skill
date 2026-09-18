@@ -119,7 +119,7 @@ officecli --version
 
 ### 可选能力
 
-- **Microsoft Word（Windows）**：OfficeCLI 可调用 Word 取得原生页数，用于核对代码材料的 30/60 页边界。没有 Word 时仍可生成、做 OpenXML 校验和 OfficeCLI HTML 预览，但提交前必须在 Word 或 WPS 中人工复核分页。本项目统一使用 OfficeCLI。
+- **Microsoft Word（Windows）**：代码段落连续写入 DOCX，由 Word 像普通文档一样根据页面空间自动换页；OfficeCLI 可调用 Word 取得最终真实页数。没有 Word 时仍可生成、做 OpenXML 校验和 OfficeCLI HTML 预览，但提交前必须在 Word 或 WPS 中人工复核分页。本项目统一使用 OfficeCLI。
 - **Chrome DevTools MCP**：只有在你希望自动截取网页截图时才需要。
 - **桌面控制能力**：仅在你的 coding agent 软件支持并且需要操作桌面界面或截图时使用。
 - **用户自行截图**：如果没有 MCP 或桌面控制能力，也可以手动把截图放到指定目录，或者直接跳过截图。

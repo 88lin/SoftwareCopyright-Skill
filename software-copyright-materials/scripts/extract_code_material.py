@@ -11,7 +11,9 @@ from typing import Any
 from common import COPYRIGHT_CODE_EXTS, FRONTEND_EXTS, ensure_dir, is_known_config_file, iter_project_files, looks_binary, read_json, read_text, rel, safe_filename, write_json
 
 
-LINES_PER_PAGE = 50
+# Used only to estimate how much source is needed for the first/last 30-page sets.
+# Final DOCX pagination is performed by Word's layout engine without hard page breaks.
+LINES_PER_PAGE = 60
 SPLIT_THRESHOLD_PAGES = 60
 MAX_CODE_COLUMNS = 100
 

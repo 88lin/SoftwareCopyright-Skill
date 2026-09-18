@@ -36,12 +36,11 @@ class OfficeCliBuilderTests(unittest.TestCase):
         fields = [command for command in commands if command.get("type") == "field"]
         self.assertEqual(fields[0]["props"]["fieldType"], "page")
 
-    def test_page_break_is_only_on_first_line_of_later_pages(self) -> None:
+    def test_code_paragraphs_do_not_force_page_breaks(self) -> None:
         commands = code_paragraph_commands([(1, ["a", "b"]), (2, ["c", "d"])])
-        self.assertEqual(
-            [command["props"]["pageBreakBefore"] for command in commands],
-            ["false", "false", "true", "false"],
-        )
+        self.assertEqual([command["props"]["text"] for command in commands], ["a", "b", "c", "d"])
+        self.assertTrue(all("pageBreakBefore" not in command["props"] for command in commands))
+        self.assertTrue(all(command["props"]["lineSpacing"] == "12pt" for command in commands))
 
     def test_parse_code_pages_preserves_page_numbers(self) -> None:
         path = self.temp_dir / "code.md"
