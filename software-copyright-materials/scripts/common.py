@@ -266,10 +266,6 @@ CODE_LINES_PER_PAGE = 55
 CODE_MAX_COLUMNS = 90
 
 
-def repo_root_from_script() -> Path:
-    return Path(__file__).resolve().parents[3]
-
-
 def is_excluded(path: Path) -> bool:
     # iter_project_files checks every directory entry while descending. Looking
     # at all absolute path parts would wrongly exclude a project merely because

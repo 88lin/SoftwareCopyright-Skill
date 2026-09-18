@@ -7,7 +7,7 @@ import argparse
 from pathlib import Path
 from typing import Any
 
-from common import CODE_MAX_COLUMNS, FRONTEND_EXTS, ensure_dir, iter_source_files, read_json, rel, write_json
+from common import CODE_MAX_COLUMNS, FRONTEND_EXTS, ensure_dir, iter_source_files, rel, write_json
 from extract_code_material import LINES_PER_PAGE, SPLIT_THRESHOLD_PAGES, category_weight, material_code_lines
 
 
