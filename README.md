@@ -239,5 +239,15 @@ officecli --version
 - 不足 60 页时生成的全部代码材料
 
 申请人身份证明、权属证明、委托材料等其他文件，请按官网页面要求另行准备并上传。
+## Star History
+
+<a href="https://www.star-history.com/?repos=fokkyp%2Fsoftwarecopyright-skill&type=date&legend=bottom-right">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=fokkyp/softwarecopyright-skill&type=date&theme=dark&legend=bottom-right" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=fokkyp/softwarecopyright-skill&type=date&legend=bottom-right" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=fokkyp/softwarecopyright-skill&type=date&legend=bottom-right" />
+ </picture>
+</a>
+
 
 <p align="left"><sub>友情连接：<a href="https://linux.do/">Linux Do 社区</a> · <a href="https://www.v2ex.com/">V2EX</a></sub></p>
